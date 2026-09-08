@@ -10,10 +10,10 @@
 [![Python](https://img.shields.io/badge/Python-3.10--3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Gemini](https://img.shields.io/badge/Gemini-Live-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/pulls)
-[![Issues](https://img.shields.io/github/issues/rhymezip/kyros-onlin-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/issues)
-[![Stars](https://img.shields.io/github/stars/rhymezip/kyros-onlin-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/stargazers)
-[![Forks](https://img.shields.io/github/forks/rhymezip/kyros-onlin-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/network/members)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/pulls)
+[![Issues](https://img.shields.io/github/issues/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/issues)
+[![Stars](https://img.shields.io/github/stars/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/stargazers)
+[![Forks](https://img.shields.io/github/forks/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/network/members)
 
 <br>
 
@@ -148,8 +148,8 @@ API keys stored with `0600` permissions, never logged. Elevated commands use nat
 
 ```bash
 # 1. Clone
-git clone https://github.com/rhymezip/kyros-onlin-desktop-assistant.git
-cd kyros-onlin-desktop-assistant
+git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
+cd kyros-online-desktop-assistant
 
 # 2. Install (creates venv, installs deps, builds audio engine)
 bash install.sh
@@ -180,8 +180,8 @@ That's it. The panel opens, you paste your Gemini API key in Settings, and you'r
 ### Option A: Automated (recommended)
 
 ```bash
-git clone https://github.com/rhymezip/kyros-onlin-desktop-assistant.git
-cd kyros-onlin-desktop-assistant
+git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
+cd kyros-online-desktop-assistant
 bash install.sh
 ```
 
@@ -522,8 +522,8 @@ Contributions are welcome! Here's how:
 ### Development Setup
 
 ```bash
-git clone https://github.com/rhymezip/kyros-onlin-desktop-assistant.git
-cd kyros-onlin-desktop-assistant
+git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
+cd kyros-online-desktop-assistant
 bash install.sh
 venv/bin/python -m unittest discover -s tests -v
 ```

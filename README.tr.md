@@ -10,10 +10,10 @@
 [![Python](https://img.shields.io/badge/Python-3.10--3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Gemini](https://img.shields.io/badge/Gemini-Live-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/pulls)
-[![Issues](https://img.shields.io/github/issues/rhymezip/kyros-onlin-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/issues)
-[![Stars](https://img.shields.io/github/stars/rhymezip/kyros-onlin-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/stargazers)
-[![Forks](https://img.shields.io/github/forks/rhymezip/kyros-onlin-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-onlin-desktop-assistant/network/members)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/pulls)
+[![Issues](https://img.shields.io/github/issues/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/issues)
+[![Stars](https://img.shields.io/github/stars/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/stargazers)
+[![Forks](https://img.shields.io/github/forks/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/network/members)
 
 <br>
 
@@ -149,8 +149,8 @@ API anahtarları `0600` izinleriyle saklanır, asla kaydedilmez. Yetkili komutla
 
 ```bash
 # 1. Klonla
-git clone https://github.com/rhymezip/kyros-onlin-desktop-assistant.git
-cd kyros-onlin-desktop-assistant
+git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
+cd kyros-online-desktop-assistant
 
 # 2. Kur (venv oluştur, bağımlılıkları kur, ses motorunu derle)
 bash install.sh
@@ -181,8 +181,8 @@ Hepsi bu kadar. Panel açılır, Ayarlar'dan Gemini API anahtarınızı yapışt
 ### Seçenek A: Otomatik (önerilen)
 
 ```bash
-git clone https://github.com/rhymezip/kyros-onlin-desktop-assistant.git
-cd kyros-onlin-desktop-assistant
+git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
+cd kyros-online-desktop-assistant
 bash install.sh
 ```
 
@@ -514,8 +514,8 @@ Katkılarınız hoşa geldi! Nasıl:
 ### Geliştirme Ortamı
 
 ```bash
-git clone https://github.com/rhymezip/kyros-onlin-desktop-assistant.git
-cd kyros-onlin-desktop-assistant
+git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
+cd kyros-online-desktop-assistant
 bash install.sh
 venv/bin/python -m unittest discover -s tests -v
 ```
