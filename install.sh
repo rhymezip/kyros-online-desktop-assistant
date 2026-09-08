@@ -2,11 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 if [[ "$(uname -s)" != Darwin ]]; then
-    echo "Bu kurulum Mac üzerinde çalıştırılmalı."
+    echo "This installer must be run on macOS."
     exit 1
 fi
 if ! xcrun --find swiftc >/dev/null 2>&1; then
-    echo "Apple Command Line Tools eksik. xcode-select --install çalıştırıp kurulumdan sonra tekrar deneyin."
+    echo "Apple Command Line Tools are missing. Run: xcode-select --install"
+    echo "After installation, try again."
     exit 1
 fi
 KYROS_PYTHON=""
@@ -17,7 +18,7 @@ for candidate in python3.12 python3.13 python3.11 python3.10 python3; do
     fi
 done
 if [[ -z "$KYROS_PYTHON" ]]; then
-    echo "Python 3.10–3.14 gerekiyor. Önerilen: Python 3.12."
+    echo "Python 3.10–3.14 is required. Recommended: Python 3.12."
     exit 1
 fi
 if [[ ! -x venv/bin/python ]]; then
@@ -31,18 +32,18 @@ from pathlib import Path
 p = Path('config/local.json')
 settings = json.loads(p.read_text()) if p.exists() else {}
 if not os.environ.get('GEMINI_API_KEY') and not settings.get('GEMINI_API_KEY'):
-    key = getpass.getpass('Gemini API anahtarı: ').strip()
+    key = getpass.getpass('Enter your Gemini API key: ').strip()
     if not key:
-        raise SystemExit('API anahtarı girilmedi.')
+        raise SystemExit('No API key provided.')
     settings['GEMINI_API_KEY'] = key
     p.write_text(json.dumps(settings, indent=2) + '\n')
     p.chmod(0o600)
-print('Gemini anahtarı hazır; mevcut ses modeli korunuyor.')
+print('Gemini API key saved; voice model kept as default.')
 PY
 bash build_audio.sh
 venv/bin/python -m unittest discover -s tests -v
-echo "Kurulum tamamlandı."
-echo "Çalıştır: venv/bin/python main.py  (veya python3 main.py)"
-echo "İsteğe bağlı .app paketi için: bash create_app_bundle.sh && open Kyros.app"
-echo "İlk kullanımda Mikrofon, Erişilebilirlik, Ekran Kaydı ve uygulama Otomasyon izinlerini verin."
-echo "Durum kontrolü: venv/bin/python main.py --doctor"
+echo "Installation complete."
+echo "Run: venv/bin/python main.py  (or python3 main.py)"
+echo "Optional app bundle: bash create_app_bundle.sh && open Kyros.app"
+echo "On first run, grant Microphone, Accessibility, Screen Recording, and Automation permissions."
+echo "Diagnostics: venv/bin/python main.py --doctor"
