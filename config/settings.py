@@ -158,6 +158,6 @@ MAX_TOOL_TIMEOUT = 300
 MAX_TOOL_OUTPUT = 24000
 MAX_AUDIO_BUFFER_SECONDS = 30
 # Gate mic while TTS is playing to avoid self-echo interrupting without AEC (Intel fallback)
-MIC_GATE_RMS = 2000
+MIC_GATE_RMS = 1100
 MIC_GATE_HANGOVER_MS = 400
-MIC_GATE_BLOCK_MS = 1000
+MIC_GATE_BLOCK_MS = 600

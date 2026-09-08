@@ -226,7 +226,7 @@ class GeminiLive:
                         self._gated_dropped += 1
                         return
                     # Barge-in: sus/dur/bir dakika/bir dakika bekle — 2 ardışık yüksek ses yeterli
-                    if rms > 2500:
+                    if rms > 1150:
                         self._barge_in_loud_count += 1
                     else:
                         self._barge_in_loud_count = 0
@@ -236,6 +236,7 @@ class GeminiLive:
                         self._barge_in_until = now + 0.9  # sonraki 0.9s boyunca tüm mic'i geçir
                         self._clear_audio()
                         self._cancel_tools()
+                        # bu chunk dahil hepsi gidecek — düşürme
                     else:
                         self._gated_dropped += 1
                         if self._gated_dropped % 80 == 0:
@@ -530,13 +531,13 @@ class GeminiLive:
             if self.mic_muted:
                 return {"ok": False, "error": "Microphone is disabled by the user."}
             self.state = AKTIF
-            # Wake feedback ("Efendim, sizi dinliyorum") 1.2s boyunca kesilmesin
-            self._feedback_until = time.monotonic() + 1.2
+            # Wake feedback ("Efendim, sizi dinliyorum") 1.8s boyunca kesilmesin
+            self._feedback_until = time.monotonic() + 1.8
         elif action == "standby":
             # Bekleme cümlesi ÖNCE söylendi (protokolde), sonra standby çağrılır.
             # O cümleyi kesmemek için discard/clear yapma — sadece araçları iptal et.
             self.state = STANDBY
-            self._feedback_until = time.monotonic() + 1.0
+            self._feedback_until = time.monotonic() + 1.5
             self._cancel_tools()
         elif action == "stop":
             self.state = AKTIF
