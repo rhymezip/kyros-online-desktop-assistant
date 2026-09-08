@@ -63,6 +63,7 @@ class GeminiLive:
         self._feedback_until = 0.0
         self._barge_in_loud_count = 0
         self._barge_in_until = 0.0
+        self._model_responding = False
 
     def _emit(self, callback, *args):
         if callback:
@@ -219,7 +220,7 @@ class GeminiLive:
                 # barge-in aktif — gate bypass
                 pass
             else:
-                is_playing = self.playing
+                is_playing = self.playing or self._model_responding
                 is_recent = now - self._last_playing_end < config.MIC_GATE_HANGOVER_MS / 1000.0
                 if is_playing:
                     if now - self._playing_start < config.MIC_GATE_BLOCK_MS / 1000.0:
@@ -272,6 +273,7 @@ class GeminiLive:
         if self.audio:
             self.audio.clear()
         self.playing = False
+        self._model_responding = False
         self._refresh()
 
     async def _send(self, message):
@@ -427,6 +429,7 @@ class GeminiLive:
         content = message.get("serverContent", {})
         if content.get("interrupted"):
             self._discard_until_turn_end = True
+            self._model_responding = False
             self._clear_audio()
             self._cancel_tools()
             log.info("User interruption: playback flushed, pending work cancelled")
@@ -452,6 +455,8 @@ class GeminiLive:
                     and (self.state == AKTIF or is_feedback_window)
                     and not self.mic_muted
                 ):
+                    if not self._model_responding:
+                        self._model_responding = True
                     if self.audio:
                         self.audio.feed(base64.b64decode(data["data"]))
                     if self._last_input_at is not None:
@@ -500,6 +505,7 @@ class GeminiLive:
                 self._refresh()
         if content.get("turnComplete"):
             self._discard_until_turn_end = False
+            self._model_responding = False
 
     def _tool_done(self, call, task):
         # Cancellation may arrive before the coroutine's first instruction/finally block.
