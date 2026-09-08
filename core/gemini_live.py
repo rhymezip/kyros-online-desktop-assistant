@@ -226,7 +226,7 @@ class GeminiLive:
                         self._gated_dropped += 1
                         return
                     # Barge-in: sus/dur/bir dakika/bir dakika bekle — 2 ardışık yüksek ses yeterli
-                    if rms > 1150:
+                    if rms > 2500:
                         self._barge_in_loud_count += 1
                     else:
                         self._barge_in_loud_count = 0
