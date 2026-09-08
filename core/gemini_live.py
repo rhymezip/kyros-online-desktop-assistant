@@ -236,11 +236,6 @@ class GeminiLive:
                         self._barge_in_until = now + 0.9  # sonraki 0.9s boyunca tüm mic'i geçir
                         self._clear_audio()
                         self._cancel_tools()
-                        # Gemini'ye explicit interrupt — VAD'a bağımlı olmadan modeli durdurur
-                        if self.ws:
-                            asyncio.create_task(self._send({
-                                "realtimeInput": {"text": ""}
-                            }))
                     else:
                         self._gated_dropped += 1
                         if self._gated_dropped % 80 == 0:
