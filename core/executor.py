@@ -179,7 +179,7 @@ class ToolExecutor:
             result = await run_process(
                 [sys.executable, str(config.ROOT / "core/macos_ui.py")],
                 stdin=json.dumps(payload).encode(),
-                timeout=30,
+                timeout=config.COMPUTER_TIMEOUT,
                 limit=256000,
             )
             if not result["ok"]:
@@ -209,4 +209,9 @@ class ToolExecutor:
                 "ok": False,
                 "error": "Page result too large; use system tools to read a smaller portion.",
             }
-        return json.loads(result["stdout"]) if result["ok"] else result
+        if not result["ok"]:
+            return result
+        try:
+            return json.loads(result["stdout"])
+        except (json.JSONDecodeError, ValueError):
+            return {"ok": False, "error": "Invalid response from web fetcher"}

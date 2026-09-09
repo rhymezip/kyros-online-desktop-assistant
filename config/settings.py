@@ -153,11 +153,15 @@ def validate_api_key(api_key, model=None, timeout=8):
 
 AUDIO_BACKEND = os.environ.get("KYROS_AUDIO_BACKEND", "native")
 SILENCE_DURATION_MS = 350
-TOOL_TIMEOUT = 60
-MAX_TOOL_TIMEOUT = 300
+TOOL_TIMEOUT = 10
+MAX_TOOL_TIMEOUT = 30
+COMPUTER_TIMEOUT = 30
 MAX_TOOL_OUTPUT = 24000
 MAX_AUDIO_BUFFER_SECONDS = 30
 # Gate mic while TTS is playing to avoid self-echo interrupting without AEC (Intel fallback)
 MIC_GATE_RMS = 1100
 MIC_GATE_HANGOVER_MS = 400
 MIC_GATE_BLOCK_MS = 600
+# Barge-in: RMS threshold for interruption detection.
+# 5000 on speakers (prevents self-echo false triggers), 1100 on headphones (no echo).
+BARGE_IN_RMS = int(os.environ.get("KYROS_BARGE_IN_RMS", "5000"))

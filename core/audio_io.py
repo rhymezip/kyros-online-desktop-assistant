@@ -4,9 +4,21 @@ import asyncio
 from collections import deque
 import logging
 import struct
+import sys
 import threading
 import time
 import config
+
+
+_HEADPHONE_MARKERS = (
+    "headphones", "airpods", "beats", "earbuds", "headset",
+    "usb audio", "bluetooth",
+)
+
+
+def _is_headphone_name(name):
+    lower = name.lower()
+    return any(m in lower for m in _HEADPHONE_MARKERS)
 
 
 class NativeAudio:
@@ -20,6 +32,8 @@ class NativeAudio:
         self.error = ""
         self.diagnostics = deque(maxlen=12)
         self.on_route_change = None
+        self.on_headphone = None
+        self.headphone = False
         self._recovering = False
         self._closing = False
         self._restarts = deque()
@@ -144,6 +158,12 @@ class NativeAudio:
             self.diagnostics.append(text)
             if text.startswith("[KYROS AUDIO]"):
                 logging.getLogger("kyros").info("%s", text)
+                if text.startswith("[KYROS AUDIO] Output:"):
+                    device_name = text.split("Output:", 1)[1].split("(id=")[0].strip()
+                    if _is_headphone_name(device_name):
+                        self.headphone = True
+                        if self.on_headphone:
+                            self.on_headphone(True)
             else:
                 self.error = text
 

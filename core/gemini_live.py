@@ -151,6 +151,8 @@ class GeminiLive:
                     NativeAudio() if self.audio_backend == "native" else PortAudio()
                 )
                 self.audio.on_route_change = self._on_audio_route
+                if hasattr(self.audio, "on_headphone"):
+                    self.audio.on_headphone = self._on_headphone
                 startup = asyncio.create_task(
                     self.audio.start(self._on_pcm, self._on_playing)
                 )
@@ -199,6 +201,13 @@ class GeminiLive:
         self._emit(self.on_mic_level, 0.0)
         self._refresh()
 
+    def _on_headphone(self, is_headphone):
+        if is_headphone:
+            config.BARGE_IN_RMS = 1100
+        else:
+            config.BARGE_IN_RMS = 5000
+        log.info("Audio output: %s — barge-in RMS=%d", "headphone" if is_headphone else "speaker", config.BARGE_IN_RMS)
+
     def _on_pcm(self, pcm):
         now = time.monotonic()
         # Compute RMS once for both level and gating
@@ -227,12 +236,12 @@ class GeminiLive:
                         self._gated_dropped += 1
                         return
                     # Barge-in: sus/dur/bir dakika/bir dakika bekle — 2 ardışık yüksek ses yeterli
-                    if rms > 1150:
+                    if rms > config.BARGE_IN_RMS:
                         self._barge_in_loud_count += 1
                     else:
                         self._barge_in_loud_count = 0
                     if self._barge_in_loud_count >= 2:  # ~170ms
-                        log.info("Barge-in: dur/sus algılandı rms=%.0f — kesiliyor", rms)
+                        log.info("Barge-in: dur/sus algılandı rms=%.0f thr=%d — kesiliyor", rms, config.BARGE_IN_RMS)
                         self._barge_in_loud_count = 0
                         self._barge_in_until = now + 0.9  # sonraki 0.9s boyunca tüm mic'i geçir
                         self._clear_audio()
