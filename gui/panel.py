@@ -1114,9 +1114,8 @@ class KyrosPanel(QMainWindow):
         self.setAutoFillBackground(False)
         self.setFixedSize(PANEL_W, PANEL_H)
         screen = QApplication.primaryScreen().geometry()
-        notch_y = self._detect_notch_bottom()
         x = (screen.width() - PANEL_W) // 2
-        self.move(x, -PANEL_H)  # Başlangıçta yukarıda saklı
+        self.move(x, -PANEL_H)
 
     def _setup_gear(self):
         # Sağ üst çark — panel boyası üstünde duran gerçek buton
@@ -1209,12 +1208,45 @@ class KyrosPanel(QMainWindow):
         self._slide_anim = QPropertyAnimation(self, b"pos")
         self._slide_anim.setDuration(300)
         screen = QApplication.primaryScreen().geometry()
-        # Dynamic Island / notch altında konumlan
-        notch_y = self._detect_notch_bottom()
         x = (screen.width() - PANEL_W) // 2
-        self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
-        self._slide_anim.setEndValue(QPoint(x, notch_y))
+        has_di, di_top = self._has_dynamic_island()
+        if has_di:
+            notch_y = self._detect_notch_bottom()
+            target_y = notch_y - PANEL_H // 2
+            self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
+            self._slide_anim.setEndValue(QPoint(x, target_y))
+        else:
+            notch_y = self._detect_notch_bottom()
+            self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
+            self._slide_anim.setEndValue(QPoint(x, notch_y))
         self._slide_anim.start()
+
+    def _has_dynamic_island(self):
+        """Dynamic Island (çentik) olup olmadığını tespit et.
+        Dynamic Island olan cihazlarda safeAreaInsets.top > 0 döner."""
+        try:
+            import objc
+            from AppKit import NSApplication, NSWindow
+            app = NSApplication.sharedApplication()
+            windows = app.windows()
+            if windows and len(windows) > 0:
+                win = windows[0]
+                insets = win.safeAreaInsets()
+                if insets.top > 0:
+                    return True, int(insets.top)
+        except Exception:
+            pass
+        try:
+            from AppKit import NSScreen
+            ns_screen = NSScreen.mainScreen()
+            frame = ns_screen.frame()
+            visible = ns_screen.visibleFrame()
+            menu_bar_height = visible.origin.y - frame.origin.y
+            if menu_bar_height > 28:
+                return True, int(menu_bar_height)
+        except Exception:
+            pass
+        return False, 0
 
     def _detect_notch_bottom(self):
         """Dynamic Island / çentik alt kenarını tespit et."""
@@ -1222,11 +1254,9 @@ class KyrosPanel(QMainWindow):
             from AppKit import NSScreen
             ns_screen = NSScreen.mainScreen()
             visible = ns_screen.visibleFrame()
-            # visibleFrame.origin.y = menü çubuğu altı (notch altı)
             return int(visible.origin.y)
         except Exception:
             pass
-        # Fallback: available geometry'yi kullan
         screen = QApplication.primaryScreen().availableGeometry()
         return screen.y()
 
