@@ -121,7 +121,7 @@ PANEL_H = 100
 EXPANDED_W = 520
 EXPANDED_H = 650
 SETTINGS_TOP = 86
-ISLAND_SHOULDER_WIDTH = 38
+ISLAND_SHOULDER_WIDTH = 24
 ISLAND_SHOULDER_DEPTH = 18
 ISLAND_BOTTOM_RADIUS = 24
 ORB_COUNT = 3
@@ -446,14 +446,28 @@ class GlyphButton(QPushButton):
         cy = self.height() / 2
 
         if self.glyph == "gear":
-            p.drawEllipse(QPointF(cx, cy), 5.2, 5.2)
-            p.drawEllipse(QPointF(cx, cy), 1.8, 1.8)
+            gear = QPainterPath()
             for index in range(8):
                 angle = math.pi * index / 4
-                p.drawLine(
-                    QPointF(cx + math.cos(angle) * 6.2, cy + math.sin(angle) * 6.2),
-                    QPointF(cx + math.cos(angle) * 8.2, cy + math.sin(angle) * 8.2),
-                )
+                for offset, radius in (
+                    (-math.pi / 8, 5.7),
+                    (-0.15, 5.7),
+                    (-0.15, 7.8),
+                    (0.15, 7.8),
+                    (0.15, 5.7),
+                    (math.pi / 8, 5.7),
+                ):
+                    point = QPointF(
+                        cx + math.cos(angle + offset) * radius,
+                        cy + math.sin(angle + offset) * radius,
+                    )
+                    if gear.elementCount() == 0:
+                        gear.moveTo(point)
+                    else:
+                        gear.lineTo(point)
+            gear.closeSubpath()
+            p.drawPath(gear)
+            p.drawEllipse(QPointF(cx, cy), 2.1, 2.1)
         elif self.glyph == "refresh":
             top_arrow = QPainterPath(QPointF(cx - 7, cy - 2))
             top_arrow.cubicTo(
@@ -1230,7 +1244,7 @@ class KyrosPanel(QMainWindow):
     def _position_gear_button(self):
         content_left = (self.width() - PANEL_W) // 2
         self._gear_btn.move(
-            content_left + PANEL_W - ISLAND_SHOULDER_WIDTH - 20,
+            content_left + PANEL_W - ISLAND_SHOULDER_WIDTH - 35,
             19,
         )
 
