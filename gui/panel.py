@@ -1209,50 +1209,45 @@ class KyrosPanel(QMainWindow):
         self._slide_anim.setDuration(300)
         screen = QApplication.primaryScreen().geometry()
         x = (screen.width() - PANEL_W) // 2
-        has_di, di_top = self._has_dynamic_island()
-        if has_di:
-            notch_y = self._detect_notch_bottom()
-            target_y = notch_y - PANEL_H // 2
-            self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
-            self._slide_anim.setEndValue(QPoint(x, target_y))
-        else:
-            notch_y = self._detect_notch_bottom()
-            self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
-            self._slide_anim.setEndValue(QPoint(x, notch_y))
+        notch_y = self._detect_notch_bottom()
+        self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
+        self._slide_anim.setEndValue(QPoint(x, notch_y))
         self._slide_anim.start()
 
     def _has_dynamic_island(self):
         """Dynamic Island (çentik) olup olmadığını tespit et.
-        Dynamic Island olan cihazlarda safeAreaInsets.top > 0 döner."""
-        try:
-            import objc
-            from AppKit import NSApplication, NSWindow
-            app = NSApplication.sharedApplication()
-            windows = app.windows()
-            if windows and len(windows) > 0:
-                win = windows[0]
-                insets = win.safeAreaInsets()
-                if insets.top > 0:
-                    return True, int(insets.top)
-        except Exception:
-            pass
+        NSScreen.safeAreaInsets.top > 0 veya auxiliaryTopLeftArea/RightArea mevcutsa
+        Dynamic Island vardır."""
         try:
             from AppKit import NSScreen
             ns_screen = NSScreen.mainScreen()
-            frame = ns_screen.frame()
-            visible = ns_screen.visibleFrame()
-            menu_bar_height = visible.origin.y - frame.origin.y
-            if menu_bar_height > 28:
-                return True, int(menu_bar_height)
+            if ns_screen is None:
+                return False, 0
+            safe_insets = ns_screen.safeAreaInsets()
+            if safe_insets.top > 0:
+                return True, int(safe_insets.top)
+            left_area = ns_screen.auxiliaryTopLeftArea()
+            right_area = ns_screen.auxiliaryTopRightArea()
+            if left_area is not None and right_area is not None:
+                notch_height = ns_screen.frame().size.height - ns_screen.visibleFrame().size.height
+                if notch_height > 0:
+                    return True, int(notch_height)
         except Exception:
             pass
         return False, 0
 
     def _detect_notch_bottom(self):
-        """Dynamic Island / çentik alt kenarını tespit et."""
+        """Dynamic Island / menubar alt kenarını tespit et.
+        Dynamic Island varsa safeAreaInsets.top, yoksa visibleFrame.origin.y kullanır."""
         try:
             from AppKit import NSScreen
             ns_screen = NSScreen.mainScreen()
+            if ns_screen is None:
+                screen = QApplication.primaryScreen().availableGeometry()
+                return screen.y()
+            safe_insets = ns_screen.safeAreaInsets()
+            if safe_insets.top > 0:
+                return int(safe_insets.top)
             visible = ns_screen.visibleFrame()
             return int(visible.origin.y)
         except Exception:
