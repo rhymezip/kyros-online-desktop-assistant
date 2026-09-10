@@ -408,6 +408,14 @@ class ModernComboBox(QComboBox):
         )
         popup_window.resize(max(self.width(), popup_window.width()), popup_window.height())
 
+    def wheelEvent(self, event):
+        # Trackpad scrolling over a closed selector belongs to the settings page.
+        # Qt otherwise changes the selected device without opening the list.
+        if self.view().isVisible():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
 
 class ModernLineEdit(QLineEdit):
     """LineEdit with animated border glow on focus."""
