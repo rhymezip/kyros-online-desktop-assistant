@@ -2,52 +2,52 @@
 
 import logging
 import math
-import time
 import threading
-from ctypes import c_void_p
-from PyQt6.QtWidgets import (
-    QMainWindow,
-    QVBoxLayout,
-    QApplication,
-    QMenu,
-    QLineEdit,
-    QPushButton,
-    QHBoxLayout,
-    QLabel,
-    QComboBox,
-    QFrame,
-    QMessageBox,
-    QGraphicsDropShadowEffect,
-    QWidget,
-    QListView,
-    QStyledItemDelegate,
-    QStyle,
-    QStyleFactory,
-)
+import time
+
 from PyQt6.QtCore import (
-    Qt,
-    QTimer,
-    QSize,
-    QRect,
-    QRectF,
+    QObject,
+    QPoint,
     QPointF,
     QPropertyAnimation,
-    QPoint,
-    QObject,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
     pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QPainter,
-    QColor,
-    QPen,
     QBrush,
-    QRadialGradient,
-    QPainterPath,
+    QColor,
     QFont,
     QFontMetrics,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QRadialGradient,
 )
-from core.panel_geometry import top_attached_panel_positions
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListView,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleFactory,
+    QVBoxLayout,
+    QWidget,
+)
 
+from core.panel_geometry import top_attached_panel_positions
 
 MODES = {
     "sesaygiti": {
@@ -55,7 +55,6 @@ MODES = {
         "orb2": (100, 150, 170),
         "orb3": (130, 130, 180),
         "dot": (160, 200, 240),
-        "ai_amp": 2.5,
         "mic_amp": 0,
         "label": "SES AYGITI DEĞİŞİYOR",
     },
@@ -64,7 +63,6 @@ MODES = {
         "orb2": (120, 140, 200),
         "orb3": (140, 120, 150),
         "dot": (220, 190, 90),
-        "ai_amp": 2.5,
         "mic_amp": 0,
         "label": "BAĞLANIYOR",
     },
@@ -73,7 +71,6 @@ MODES = {
         "orb2": (100, 220, 180),
         "orb3": (150, 140, 240),
         "dot": (110, 230, 180),
-        "ai_amp": 10,
         "mic_amp": 8,
         "label": "UYGULUYOR · DİNLİYOR",
     },
@@ -82,7 +79,6 @@ MODES = {
         "orb2": (100, 100, 110),
         "orb3": (100, 90, 100),
         "dot": (160, 160, 160),
-        "ai_amp": 0,
         "mic_amp": 0,
         "label": "MİKROFON KAPALI",
     },
@@ -91,7 +87,6 @@ MODES = {
         "orb2": (160, 100, 100),
         "orb3": (120, 80, 110),
         "dot": (255, 110, 100),
-        "ai_amp": 1,
         "mic_amp": 0,
         "label": "BAĞLANTI / SES HATASI",
     },
@@ -100,7 +95,6 @@ MODES = {
         "orb2": (80, 160, 240),
         "orb3": (160, 140, 255),
         "dot": (140, 210, 180),
-        "ai_amp": 2.5,
         "mic_amp": 1.5,
         "label": "BEKLIYOR",
     },
@@ -109,7 +103,6 @@ MODES = {
         "orb2": (100, 240, 200),
         "orb3": (120, 180, 255),
         "dot": (90, 190, 255),
-        "ai_amp": 6.0,
         "mic_amp": 13.0,
         "label": "DINLIYOR",
     },
@@ -118,7 +111,6 @@ MODES = {
         "orb2": (100, 220, 210),
         "orb3": (220, 160, 200),
         "dot": (200, 160, 255),
-        "ai_amp": 17.0,
         "mic_amp": 3.5,
         "label": "KONUSUYOR",
     },
@@ -139,10 +131,6 @@ LERP = 0.045
 class PanelSignals(QObject):
     mode = pyqtSignal(str)
     level = pyqtSignal(float)
-    text = pyqtSignal(str, str)
-    error = pyqtSignal(str)
-    tool = pyqtSignal(str, str)
-    sources = pyqtSignal(object)
 
 
 def lerp(a, b, t):
@@ -162,36 +150,6 @@ def panel_positions(screen, panel_width=PANEL_W, panel_height=PANEL_H):
         screen.x(), screen.y(), screen.width(), panel_width, panel_height
     )
     return QPoint(*hidden), QPoint(*visible)
-
-
-class AnimatedWidget(QObject):
-    """Base for widgets with fade-in animation."""
-    def __init__(self, widget, delay=0):
-        super().__init__(widget)
-        self._widget = widget
-        self._opacity = 0.0
-        self._delay = delay
-        widget.setWindowOpacity(0.0)
-        self._timer = QTimer(self)
-        self._timer.setSingleShot(True)
-        self._timer.timeout.connect(self._fade_in)
-        self._timer.start(delay)
-
-    def _fade_in(self):
-        self._anim = QPropertyAnimation(self, b"opacity")
-        self._anim.setDuration(350)
-        self._anim.setStartValue(0.0)
-        self._anim.setEndValue(1.0)
-        self._anim.start()
-
-    @property
-    def opacity(self):
-        return self._opacity
-
-    @opacity.setter
-    def opacity(self, val):
-        self._opacity = val
-        self._widget.setWindowOpacity(val)
 
 
 class GlowEffect(QGraphicsDropShadowEffect):
@@ -216,84 +174,6 @@ class GlowEffect(QGraphicsDropShadowEffect):
         self._anim.setStartValue(self.blurRadius())
         self._anim.setEndValue(12)
         self._anim.start()
-
-
-class PulseLabel(QLabel):
-    """Label with subtle pulse animation for status updates."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._pulse_anim = None
-
-    def pulse(self, color="#5b6bff"):
-        if self._pulse_anim:
-            self._pulse_anim.stop()
-        self._pulse_anim = QPropertyAnimation(self, b"styleSheet")
-        self._pulse_anim.setDuration(600)
-        base = f"color: {color}; background: transparent;"
-        highlight = f"color: {color}; background: transparent; font-weight: 700;"
-        self._pulse_anim.setKeyValueAt(0.0, base)
-        self._pulse_anim.setKeyValueAt(0.5, highlight)
-        self._pulse_anim.setKeyValueAt(1.0, base)
-        self._pulse_anim.start()
-
-
-class SectionCard(QFrame):
-    """Glassmorphism card with fade-in animation."""
-    def __init__(self, title="", parent=None):
-        super().__init__(parent)
-        self.setObjectName("sectionCard")
-        self.setStyleSheet("""
-            QFrame#sectionCard {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(30, 30, 45, 180),
-                    stop:1 rgba(20, 20, 30, 160));
-                border: 1px solid rgba(90, 100, 160, 60);
-                border-radius: 14px;
-                padding: 16px;
-            }
-            QFrame#sectionCard:hover {
-                border: 1px solid rgba(90, 100, 160, 120);
-            }
-        """)
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(16, 14, 16, 14)
-        self._layout.setSpacing(10)
-
-        if title:
-            lbl = QLabel(title)
-            lbl.setStyleSheet("""
-                font-size: 10px; font-weight: 700; color: #7a82a8;
-                letter-spacing: 1.5px; padding: 0 0 4px 0;
-                border: none; background: transparent;
-            """)
-            self._layout.addWidget(lbl)
-
-        # Fade-in
-        self._opacity_val = 0.0
-        self._fade = QPropertyAnimation(self, b"windowOpacity")
-        self._fade.setDuration(400)
-
-    def fade_in(self, delay=0):
-        self._fade.stop()
-        if delay > 0:
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(delay, self._start_fade)
-        else:
-            self._start_fade()
-
-    def _start_fade(self):
-        self._fade.setStartValue(0.0)
-        self._fade.setEndValue(1.0)
-        self._fade.start()
-
-    @property
-    def windowOpacity(self):
-        return self._opacity_val
-
-    @windowOpacity.setter
-    def windowOpacity(self, val):
-        self._opacity_val = val
-        self.setWindowOpacity(val)
 
 
 class ComboItemDelegate(QStyledItemDelegate):
@@ -963,7 +843,7 @@ class SettingsPane(QWidget):
 
     def _animate_open(self):
         """Staggered fade-in animation for all cards."""
-        from PyQt6.QtCore import QSequentialAnimationGroup, QEasingCurve
+        from PyQt6.QtCore import QEasingCurve, QSequentialAnimationGroup
         self._fade_group = QSequentialAnimationGroup(self)
         for card in self._cards:
             card.setWindowOpacity(0.0)
@@ -1292,12 +1172,6 @@ class KyrosPanel(QMainWindow):
         self.signals = PanelSignals(self)
         self.signals.mode.connect(self.set_mode)
         self.signals.level.connect(self.set_mic_level)
-        self.signals.text.connect(self._add_text)
-        self.signals.error.connect(lambda text: self._add_text("Hata", text))
-        self.signals.tool.connect(
-            lambda name, state: self._add_text("İşlem", f"{name}: {state}")
-        )
-        self.signals.sources.connect(self._add_sources)
         self._mic_muted = False
         self._panel_visible = False
         self._settings_open = False
@@ -1309,8 +1183,6 @@ class KyrosPanel(QMainWindow):
         self._tgt_orb = [
             list(MODES["bekliyor"][f"orb{i + 1}"]) for i in range(ORB_COUNT)
         ]
-        self._cur_ai_amp = MODES["bekliyor"]["ai_amp"]
-        self._tgt_ai_amp = MODES["bekliyor"]["ai_amp"]
         self._cur_mic_amp = MODES["bekliyor"]["mic_amp"]
         self._tgt_mic_amp = MODES["bekliyor"]["mic_amp"]
         self._cur_dot = list(MODES["bekliyor"]["dot"])
@@ -1328,18 +1200,6 @@ class KyrosPanel(QMainWindow):
     def bind(self, gemini):
         gemini.on_state_change = self.signals.mode.emit
         gemini.on_mic_level = self.signals.level.emit
-        gemini.on_text = self.signals.text.emit
-        gemini.on_error = self.signals.error.emit
-        gemini.on_tool = self.signals.tool.emit
-        gemini.on_sources = self.signals.sources.emit
-
-    def _add_text(self, who, text):
-        # Chat penceresi kaldırıldı — sadece log
-        if who == "Hata":
-            logging.getLogger("kyros").debug("Panel error: %s", text)
-
-    def _add_sources(self, sources):
-        pass  # Chat penceresi kaldırıldı
 
     def _setup_window(self):
         self.setWindowFlags(
@@ -1370,7 +1230,7 @@ class KyrosPanel(QMainWindow):
         """Menubar'da status bar item olustur (Textream gibi)."""
         try:
             import objc
-            from AppKit import NSStatusBar, NSImage, NSMenu, NSMenuItem
+            from AppKit import NSImage, NSMenu, NSMenuItem, NSStatusBar
 
             self._statusbar = NSStatusBar.systemStatusBar()
             self._statusitem = self._statusbar.statusItemWithLength_(-2)
@@ -1417,14 +1277,15 @@ class KyrosPanel(QMainWindow):
             self._statusitem.setMenu_(menu)
 
         except Exception as e:
-            logging.getLogger("kyros").warning("Status bar item olusturulamadi: %s", e)
+            logging.getLogger("kyros.ui").warning(
+                "macOS menü çubuğu simgesi oluşturulamadı: %s", e
+            )
 
     def _check_api_on_startup(self):
         try:
             import config
 
             if not getattr(config, "GEMINI_API_KEY", ""):
-                self._add_text("Sistem", "API anahtarı yok. Ayarlar düğmesinden Gemini API ekleyin.")
                 QTimer.singleShot(400, self._open_api_settings)
         except Exception:
             pass
@@ -1521,11 +1382,12 @@ class KyrosPanel(QMainWindow):
                         time.sleep(0.6)
                         g.start()
                     except Exception as e:
-                        logging.getLogger("kyros").error("Panel restart failed: %s", e)
+                        logging.getLogger("kyros.ui").error(
+                            "Yeni ayarlar uygulanırken bağlantı başlatılamadı: %s", e
+                        )
                 threading.Thread(target=restart, daemon=True).start()
-                self._add_text("Sistem", f"Model: {new_model}" + (" · API güncellendi" if new_api else ""))
         except Exception as e:
-            logging.getLogger("kyros").error("_apply_api_change failed: %s", e)
+            logging.getLogger("kyros.ui").error("Ayarlar uygulanamadı: %s", e)
 
     def _init_timer(self):
         self.timer = QTimer()
@@ -1563,12 +1425,12 @@ class KyrosPanel(QMainWindow):
         try:
             import objc
             from AppKit import (
-                NSScreenSaverWindowLevel,
                 NSColor,
+                NSScreenSaverWindowLevel,
                 NSWindowCollectionBehaviorCanJoinAllSpaces,
                 NSWindowCollectionBehaviorFullScreenAuxiliary,
-                NSWindowCollectionBehaviorStationary,
                 NSWindowCollectionBehaviorIgnoresCycle,
+                NSWindowCollectionBehaviorStationary,
             )
 
             ns_view = objc.objc_object(c_void_p=int(self.winId()))
@@ -1597,13 +1459,9 @@ class KyrosPanel(QMainWindow):
                          frame.origin.y + frame.size.height)
                     )
         except Exception as e:
-            logging.getLogger("kyros").warning("macOS window fix failed: %s", e)
-
-    def focusOutEvent(self, e):
-        pass
-
-    def changeEvent(self, e):
-        self.show()
+            logging.getLogger("kyros.ui").warning(
+                "Panel macOS ekranına sabitlenemedi: %s", e
+            )
 
     def resizeEvent(self, event):
         if hasattr(self, "_gear_btn"):
@@ -1619,7 +1477,6 @@ class KyrosPanel(QMainWindow):
         self.current_mode = mode
         m = MODES[mode]
         self._tgt_orb = [list(m[f"orb{i + 1}"]) for i in range(ORB_COUNT)]
-        self._tgt_ai_amp = m["ai_amp"]
         self._tgt_mic_amp = m["mic_amp"]
         self._tgt_dot = list(m["dot"])
 
@@ -1631,7 +1488,6 @@ class KyrosPanel(QMainWindow):
         for i in range(ORB_COUNT):
             for j in range(3):
                 self._cur_orb[i][j] = lerp(self._cur_orb[i][j], self._tgt_orb[i][j], t)
-        self._cur_ai_amp = lerp(self._cur_ai_amp, self._tgt_ai_amp, t)
         self._cur_mic_amp = lerp(self._cur_mic_amp, self._tgt_mic_amp, t)
         for j in range(3):
             self._cur_dot[j] = lerp(self._cur_dot[j], self._tgt_dot[j], t)
@@ -1786,7 +1642,7 @@ class KyrosPanel(QMainWindow):
             ):
                 item = menu.addAction(label)
                 item.triggered.connect(
-                    lambda checked=False, action=action: self.kyros.control(action)
+                    lambda _checked=False, action=action: self.kyros.control(action)
                 )
             menu.addSeparator()
             mute = menu.addAction(

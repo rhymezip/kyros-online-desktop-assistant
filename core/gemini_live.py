@@ -2,11 +2,11 @@
 
 import asyncio
 import base64
-from collections import OrderedDict
 import json
 import logging
 import threading
 import time
+from collections import OrderedDict
 from urllib.parse import quote
 
 import config
@@ -15,7 +15,39 @@ from core.protocol import setup_message
 
 STANDBY = "standby"
 AKTIF = "aktif"
-log = logging.getLogger("kyros")
+log = logging.getLogger("kyros.live")
+tool_log = logging.getLogger("kyros.tool")
+
+MODE_LABELS = {
+    "kapali": "Mikrofon kapalı",
+    "baglaniyor": "Bağlantı kuruluyor",
+    "sesaygiti": "Ses aygıtı değişiyor",
+    "bekliyor": "Bekliyor",
+    "konusuyor": "Yanıt veriyor",
+    "uyguluyor": "İşlem uyguluyor",
+    "dinliyor": "Dinliyor",
+    "hata": "Bağlantı veya ses hatası",
+}
+TOOL_LABELS = {
+    "run_shell": "Komut",
+    "run_applescript": "Mac otomasyonu",
+    "computer": "Ekran işlemi",
+    "read_web": "Web okuma",
+    "google_search": "Web araması",
+    "session_control": "Oturum kontrolü",
+}
+
+
+def _friendly_error_message(exc):
+    message = str(exc)
+    lower = message.lower()
+    if "1011" in message or "internal error" in lower:
+        return "Gemini bağlantısı beklenmedik biçimde kapandı (1011). Yeniden bağlanılacak."
+    if "timed out" in lower or "timeout" in lower:
+        return "Bağlantı zaman aşımına uğradı. Yeniden denenecek."
+    if "401" in message or "403" in message:
+        return "Gemini API anahtarı reddedildi. Ayarlardaki anahtarı kontrol edin."
+    return message
 
 
 class GeminiLive:
@@ -70,7 +102,7 @@ class GeminiLive:
             try:
                 callback(*args)
             except Exception:
-                log.exception("UI callback failed")
+                log.exception("Arayüz güncellenemedi.")
 
     def _refresh(self, override=None):
         mode = override or (
@@ -90,6 +122,7 @@ class GeminiLive:
         )
         if mode != self._last_mode:
             self._last_mode = mode
+            log.info("Durum: %s.", MODE_LABELS.get(mode, mode))
             self._emit(self.on_state_change, mode)
 
     def start(self):
@@ -122,16 +155,19 @@ class GeminiLive:
     def _error(self, exc):
         # Don't spam "0 bytes read" on normal Ctrl+C / close
         if self._startup_stop.is_set() or not self.is_running:
-            log.info("Shutting down: %s", str(exc)[:200])
+            log.debug("Kapanış ayrıntısı: %s", str(exc)[:200])
             return
         message = str(exc)
         if self.api_key:
             message = message.replace(self.api_key, "[hidden]").replace(
                 quote(self.api_key, safe=""), "[hidden]"
             )
-        message = message[:1000]
-        log.error("%s", message)
-        self._emit(self.on_error, message)
+        technical_message = message[:1000]
+        friendly_message = _friendly_error_message(technical_message)
+        log.error("Bağlantı sorunu: %s", friendly_message)
+        if friendly_message != technical_message:
+            log.debug("Ham bağlantı hatası: %s", technical_message)
+        self._emit(self.on_error, friendly_message)
 
     async def _run(self):
         self._loop = asyncio.get_running_loop()
@@ -209,7 +245,11 @@ class GeminiLive:
             config.BARGE_IN_RMS = 1100
         else:
             config.BARGE_IN_RMS = 5000
-        log.info("Audio output: %s — barge-in RMS=%d", "headphone" if is_headphone else "speaker", config.BARGE_IN_RMS)
+        log.debug(
+            "Ses çıkışı türü: %s; söz kesme eşiği=%d",
+            "kulaklık" if is_headphone else "hoparlör",
+            config.BARGE_IN_RMS,
+        )
 
     def _on_pcm(self, pcm):
         now = time.monotonic()
@@ -244,7 +284,8 @@ class GeminiLive:
                     else:
                         self._barge_in_loud_count = 0
                     if self._barge_in_loud_count >= 2:  # ~170ms
-                        log.info("Barge-in: dur/sus algılandı rms=%.0f thr=%d — kesiliyor", rms, config.BARGE_IN_RMS)
+                        log.info("Sesli durdurma algılandı; yanıt kesildi.")
+                        log.debug("Söz kesme seviyesi: rms=%.0f eşik=%d", rms, config.BARGE_IN_RMS)
                         self._barge_in_loud_count = 0
                         self._barge_in_until = now + 0.9  # sonraki 0.9s boyunca tüm mic'i geçir
                         self._clear_audio()
@@ -253,15 +294,15 @@ class GeminiLive:
                     else:
                         self._gated_dropped += 1
                         if self._gated_dropped % 80 == 0:
-                            log.info("Mic gate: dropping while playing rms=%.0f", rms)
+                            log.debug("Konuşma sırasında yankı bastırıldı: rms=%.0f", rms)
                         return
                 else:
                     self._barge_in_loud_count = 0
                 if is_recent and rms < config.MIC_GATE_RMS:
                     self._gated_dropped += 1
                     if self._gated_dropped % 40 == 0:
-                        log.info(
-                            "Mic gate: dropping echo hangover rms=%.0f thr=%d",
+                        log.debug(
+                            "Yanıt sonrası yankı bastırıldı: rms=%.0f eşik=%d",
                             rms,
                             config.MIC_GATE_RMS,
                         )
@@ -269,7 +310,7 @@ class GeminiLive:
             # Never replay stale microphone audio after congestion/reconnection.
             if self._mic_queue.full():
                 self._mic_queue.get_nowait()
-                log.warning("Microphone congestion: oldest chunk discarded")
+                log.warning("Mikrofon akışı yoğunlaştı; eski bir ses parçası atlandı.")
             self._mic_queue.put_nowait(pcm)
 
     def _on_playing(self, playing):
@@ -331,11 +372,9 @@ class GeminiLive:
                     delay = 1
                     self._drain_mic()
                     self._refresh()
-                    log.info(
-                        "Live connected model=%s resumed=%s",
-                        self.model,
-                        bool(self._handle),
-                    )
+                    log.info("Gemini Live hazır. Model: %s.", self.model)
+                    if self._handle:
+                        log.debug("Önceki Gemini oturumu sürdürüldü.")
                     # Reconcile real local state with resumed conversation; never replay commands.
                     if self._handle:
                         await self._send(
@@ -421,7 +460,7 @@ class GeminiLive:
             message = json.loads(raw)
             await self._handle_message(message)
             if "goAway" in message:
-                log.info("Server requested session renewal")
+                log.info("Gemini oturumu yenileniyor.")
                 return
 
     async def _handle_message(self, message):
@@ -444,7 +483,7 @@ class GeminiLive:
             self._model_responding = False
             self._clear_audio()
             self._cancel_tools()
-            log.info("User interruption: playback flushed, pending work cancelled")
+            log.info("Kullanıcı araya girdi; yanıt ve bekleyen işlemler durduruldu.")
         transcript = content.get("inputTranscription", {}).get("text")
         if transcript:
             self._last_input_at = time.monotonic()
@@ -472,8 +511,8 @@ class GeminiLive:
                     if self.audio:
                         self.audio.feed(base64.b64decode(data["data"]))
                     if self._last_input_at is not None:
-                        log.info(
-                            "First audio after last transcript: %.0f ms",
+                        log.debug(
+                            "Yanıt sesinin ilk gecikmesi: %.0f ms",
                             (time.monotonic() - self._last_input_at) * 1000,
                         )
                         self._last_input_at = None
@@ -623,13 +662,14 @@ class GeminiLive:
         finally:
             self._remember(call_id, result)
             self._tasks.pop(call_id, None)
-            log.info(
-                "Tool name=%s ok=%s cancelled=%s elapsed_ms=%.0f",
-                name,
-                result.get("ok"),
-                result.get("cancelled", False),
-                (time.monotonic() - started) * 1000,
-            )
+            label = TOOL_LABELS.get(name, name.replace("_", " ").title())
+            elapsed = time.monotonic() - started
+            if result.get("cancelled"):
+                tool_log.warning("İptal edildi: %s (%.1f sn).", label, elapsed)
+            elif result.get("ok"):
+                tool_log.info("Tamamlandı: %s (%.1f sn).", label, elapsed)
+            else:
+                tool_log.error("Başarısız: %s (%.1f sn).", label, elapsed)
             self._emit(
                 self.on_tool,
                 name,

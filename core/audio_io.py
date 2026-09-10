@@ -1,14 +1,16 @@
 """Streaming audio backends. Native macOS provides acoustic echo cancellation."""
 
 import asyncio
-from collections import deque
 import json
 import logging
 import struct
-import sys
 import threading
 import time
+from collections import deque
+
 import config
+
+log = logging.getLogger("kyros.audio")
 
 
 _HEADPHONE_MARKERS = (
@@ -22,6 +24,29 @@ def _is_headphone_name(name):
     return any(m in lower for m in _HEADPHONE_MARKERS)
 
 
+def _native_value(text, marker):
+    return text.split(marker, 1)[1].split("(id=", 1)[0].strip()
+
+
+def _log_native_diagnostic(text):
+    """Turn native bridge diagnostics into useful user-facing events."""
+    if " Input:" in text:
+        log.info("Mikrofon: %s", _native_value(text, "Input:"))
+    elif " Output:" in text:
+        log.info("Hoparlör: %s", _native_value(text, "Output:"))
+    elif "Standard started" in text:
+        log.info("Ses sistemi hazır. Yankı engelleme kapalı.")
+    elif "Voice processing started" in text:
+        log.info("Ses sistemi hazır. Yankı engelleme açık.")
+    elif "route changed" in text.lower():
+        log.warning("macOS ses yönlendirmesindeki değişiklik algılandı.")
+    elif "fallback" in text.lower():
+        log.warning("Yankı engelleme kullanılamadı; standart ses moduna geçildi.")
+        log.debug("Yerel ses ayrıntısı: %s", text)
+    else:
+        log.debug("Yerel ses ayrıntısı: %s", text)
+
+
 def list_audio_devices():
     """List available audio devices by calling native/kyros-audio --list-devices."""
     binary = config.ROOT / "native/kyros-audio"
@@ -33,6 +58,7 @@ def list_audio_devices():
             [str(binary), "--list-devices"],
             capture_output=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0 and result.stdout:
             return json.loads(result.stdout.decode("utf-8", errors="replace"))
@@ -97,8 +123,8 @@ class NativeAudio:
         self.clear()
         # On Intel Macs voice processing (3ch) currently produces no audio — skip VP to avoid 1.5s fallback delay.
         # Apple Silicon can keep VP for AEC. Allow override via KYROS_NO_VP env.
-        import platform as _plat
         import os as _os
+        import platform as _plat
 
         args = [str(config.ROOT / "native/kyros-audio")]
         if _os.environ.get("KYROS_NO_VP") == "1" or _plat.machine() == "x86_64":
@@ -152,9 +178,7 @@ class NativeAudio:
                 if self.on_route_change:
                     self.on_route_change(True)
                 await self._stop_process()
-                logging.getLogger("kyros").info(
-                    "Reopening current macOS default audio devices"
-                )
+                log.warning("Ses aygıtı değişti; bağlantı yenileniyor.")
                 await asyncio.sleep(
                     0.3 if code == 75 else 0.6 * self._initialization_failures
                 )
@@ -183,7 +207,7 @@ class NativeAudio:
             text = line.decode(errors="replace").strip()[-1600:]
             self.diagnostics.append(text)
             if text.startswith("[KYROS AUDIO]"):
-                logging.getLogger("kyros").info("%s", text)
+                _log_native_diagnostic(text)
                 if text.startswith("[KYROS AUDIO] Output:"):
                     device_name = text.split("Output:", 1)[1].split("(id=")[0].strip()
                     if _is_headphone_name(device_name):
@@ -272,14 +296,14 @@ class PortAudio:
             if not self.failed.done():
                 self.failed.set_exception(RuntimeError(message))
 
-        def capture(data, frames, timing, status):
+        def capture(data, _frames, _timing, status):
             if status.input_overflow:
                 loop.call_soon_threadsafe(
                     fail, "Mikrofon tamponu taştı; ses aygıtını kontrol edin."
                 )
             loop.call_soon_threadsafe(on_pcm, bytes(data))
 
-        def playback(out, frames, timing, status):
+        def playback(out, _frames, _timing, status):
             with self.lock:
                 size = min(len(out), len(self.buffer))
                 out[:] = bytes(self.buffer[:size]) + bytes(len(out) - size)

@@ -2,7 +2,8 @@ import asyncio
 import struct
 import unittest
 from types import SimpleNamespace
-from core.audio_io import NativeAudio
+
+from core.audio_io import NativeAudio, _log_native_diagnostic
 
 
 def frame(kind, data=b""):
@@ -10,6 +11,13 @@ def frame(kind, data=b""):
 
 
 class AudioTests(unittest.IsolatedAsyncioTestCase):
+    def test_native_diagnostics_are_grouped_by_importance(self):
+        with self.assertLogs("kyros.audio", level="DEBUG") as captured:
+            _log_native_diagnostic("[KYROS AUDIO] Input: MacBook Air Mic (id=1)")
+            _log_native_diagnostic("[KYROS AUDIO] First input frame: sourceFrames=480")
+        self.assertIn("INFO:kyros.audio:Mikrofon: MacBook Air Mic", captured.output)
+        self.assertIn("DEBUG:kyros.audio:Yerel ses ayrıntısı", captured.output[1])
+
     async def test_native_pcm_and_generation_aware_playback_events(self):
         audio = NativeAudio()
         pcm, playing = [], []

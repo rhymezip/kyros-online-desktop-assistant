@@ -419,6 +419,10 @@ See [`MAC_TEST.md`](MAC_TEST.md) for the full manual acceptance test checklist c
 
 ### Logs
 
+The terminal shows concise status, audio-device, connection, and tool-result events.
+Low-level audio and connection diagnostics stay in the rotating log file; use
+`--debug` when you also want to see them live in the terminal.
+
 ```bash
 tail -f logs/kyros.log    # Rotating: 1MB × 3 files
 ```

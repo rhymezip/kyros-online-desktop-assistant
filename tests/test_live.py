@@ -2,7 +2,8 @@ import asyncio
 import base64
 import json
 import unittest
-from core.gemini_live import GeminiLive, AKTIF, STANDBY
+
+from core.gemini_live import AKTIF, STANDBY, GeminiLive, _friendly_error_message
 from core.protocol import setup_message
 
 
@@ -56,6 +57,15 @@ def calls(*items):
 
 
 class LiveTests(unittest.IsolatedAsyncioTestCase):
+    def test_internal_connection_error_is_explained(self):
+        message = _friendly_error_message(
+            "received 1011 (internal error) Internal error occurred."
+        )
+        self.assertEqual(
+            message,
+            "Gemini bağlantısı beklenmedik biçimde kapandı (1011). Yeniden bağlanılacak.",
+        )
+
     async def asyncSetUp(self):
         self.executor = FakeExecutor()
         self.live = GeminiLive(executor=self.executor)

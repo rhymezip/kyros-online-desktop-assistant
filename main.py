@@ -3,11 +3,12 @@
 
 import argparse
 import logging
-from logging.handlers import RotatingFileHandler
 import signal
 import sys
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
 from core.bootstrap import use_project_environment
 
 if __name__ == "__main__":
@@ -16,8 +17,6 @@ if __name__ == "__main__":
 import config
 from core.gemini_live import GeminiLive
 
-
-# ─── Renkli Log Formatı ──────────────────────────────────────────────
 COLORS = {
     "DEBUG": "\033[36m",
     "INFO": "\033[32m",
@@ -29,36 +28,66 @@ RESET = "\033[0m"
 DIM = "\033[2m"
 BOLD = "\033[1m"
 
+LEVEL_LABELS = {
+    "DEBUG": "DETAY",
+    "INFO": "BİLGİ",
+    "WARNING": "UYARI",
+    "ERROR": "HATA",
+    "CRITICAL": "KRİTİK",
+}
+COMPONENT_LABELS = {
+    "kyros.app": "SİSTEM",
+    "kyros.audio": "SES",
+    "kyros.live": "CANLI",
+    "kyros.tool": "ARAÇ",
+    "kyros.ui": "ARAYÜZ",
+}
+
 
 class ColorFormatter(logging.Formatter):
-    """Terminal için renkli log formatı."""
+    """Compact, readable terminal output with optional ANSI color."""
+
+    def __init__(self, use_color=True):
+        super().__init__()
+        self.use_color = use_color
+
+    def _paint(self, value, *styles):
+        if not self.use_color:
+            return value
+        return "".join(styles) + value + RESET
 
     def format(self, record):
         levelname = record.levelname
-        color = COLORS.get(levelname, "")
-        module = record.module
-        msg = record.getMessage()
+        level = LEVEL_LABELS.get(levelname, levelname)
+        component = COMPONENT_LABELS.get(
+            record.name, record.name.removeprefix("kyros.").upper()
+        )
+        message = record.getMessage()
         ts = self.formatTime(record, "%H:%M:%S")
+        color = COLORS.get(levelname, "")
+        style = (color, BOLD) if levelname in ("ERROR", "CRITICAL") else (color,)
+        prefix = "  ".join(
+            (
+                self._paint(ts, DIM),
+                self._paint(f"{level:<6}", *style),
+                self._paint(f"{component:<7}", DIM),
+            )
+        )
+        continuation = " " * (8 + 2 + 6 + 2 + 7 + 2)
+        return prefix + "  " + message.replace("\n", "\n" + continuation)
 
-        if levelname == "ERROR":
-            prefix = f"{color}{BOLD}{levelname}{RESET}"
-        elif levelname == "WARNING":
-            prefix = f"{color}{levelname}{RESET}"
-        elif levelname == "DEBUG":
-            prefix = f"{color}{DIM}{levelname}{RESET}"
-        else:
-            prefix = f"{color}{levelname}{RESET}"
 
-        return f"{DIM}{ts}{RESET} {prefix} {DIM}[{module}]{RESET} {msg}"
-
-
-BANNER = f"""
-{BOLD}{COLORS['INFO']}  ╭───────────────────────────────────────╮
-  │            ◉  KYROS  v3.0               │
-  │       Canlı Ses Asistanı — macOS         │
-  ╰───────────────────────────────────────╯{RESET}
-{DIM}  Python {sys.version.split()[0]} • Ctrl+C ile çıkış{RESET}
-"""
+def banner(use_color=True):
+    green = COLORS["INFO"] if use_color else ""
+    bold = BOLD if use_color else ""
+    dim = DIM if use_color else ""
+    reset = RESET if use_color else ""
+    return (
+        f"\n{bold}{green}  ╭─ KYROS 3.0 ─────────────────────────╮\n"
+        "  │ Canlı masaüstü asistanı              │\n"
+        f"  ╰──────────────────────────────────────╯{reset}\n"
+        f"{dim}  macOS • Python {sys.version.split()[0]} • Çıkış: Ctrl+C{reset}\n"
+    )
 
 
 class Kyros:
@@ -87,21 +116,29 @@ def configure_logging(debug):
     folder = config.ROOT / "logs"
     folder.mkdir(exist_ok=True, mode=0o700)
 
-    # Dosya handler'ı (renksiz, detaylı)
     file_handler = RotatingFileHandler(
-        folder / "kyros.log", maxBytes=1_000_000, backupCount=3
+        folder / "kyros.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8"
     )
-    file_handler.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)-8s [%(module)s.%(funcName)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    ))
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)-8s [%(name)s:%(funcName)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
 
-    # Terminal handler'ı (renkli, düzenli)
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(ColorFormatter())
+    stream_handler.setLevel(logging.DEBUG if debug else logging.INFO)
+    stream_handler.setFormatter(
+        ColorFormatter(use_color=stream_handler.stream.isatty())
+    )
 
     log = logging.getLogger("kyros")
-    log.setLevel(logging.DEBUG if debug else logging.INFO)
+    log.setLevel(logging.DEBUG)
+    log.propagate = False
+    for handler in log.handlers[:]:
+        handler.close()
+        log.removeHandler(handler)
     log.addHandler(file_handler)
     log.addHandler(stream_handler)
 
@@ -147,20 +184,18 @@ def main():
         return 1
 
     configure_logging(args.debug)
-    log = logging.getLogger("kyros")
+    log = logging.getLogger("kyros.app")
 
     if not config.GEMINI_API_KEY:
         log.warning("API anahtarı yok — panel açılacak, sağ üstteki Ayarlar düğmesinden ekleyin.")
     else:
-        print(BANNER)
+        print(banner(sys.stdout.isatty()))
 
     kyros = Kyros(args.debug, args.text, args.audio_backend)
 
     if args.text or args.no_panel:
-        log.info("Metin modu başlatılıyor...")
-        kyros.gemini.on_state_change = lambda mode: log.info("Durum: %s", mode)
+        log.info("Metin modu hazırlanıyor.")
         kyros.gemini.on_text = lambda who, text: print(f"  {who}: {text}")
-        kyros.gemini.on_error = lambda error: log.error(error)
         kyros.gemini.on_sources = lambda sources: log.debug("Kaynaklar: %s", sources)
         signal.signal(signal.SIGTERM, lambda *_: kyros.stop())
         try:
@@ -180,7 +215,7 @@ def main():
                 while kyros.gemini.is_running:
                     time.sleep(0.1)
         except KeyboardInterrupt:
-            log.info("Kullanıcı çıkışı")
+            log.info("Kyros kapatılıyor.")
         finally:
             kyros.stop()
         return 0
@@ -188,12 +223,13 @@ def main():
     try:
         from PyQt6.QtCore import QTimer
         from PyQt6.QtWidgets import QApplication
+
         from gui.panel import KyrosPanel
     except ModuleNotFoundError as exc:
         log.error("Eksik bağımlılık: %s. bash install.sh çalıştırın.", exc.name)
         return 1
 
-    log.info("Panel modu başlatılıyor...")
+    log.info("Arayüz hazırlanıyor.")
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     panel = KyrosPanel(kyros)
