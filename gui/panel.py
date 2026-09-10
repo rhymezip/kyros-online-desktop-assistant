@@ -121,9 +121,8 @@ PANEL_H = 100
 EXPANDED_W = 520
 EXPANDED_H = 650
 SETTINGS_TOP = 86
-ISLAND_SHOULDER_WIDTH = 24
-ISLAND_SHOULDER_DEPTH = 18
-ISLAND_BOTTOM_RADIUS = 24
+ISLAND_TOP_INSET = 16
+ISLAND_BOTTOM_RADIUS = 20
 ORB_COUNT = 3
 MIC_BARS = 32
 LERP = 0.045
@@ -1234,7 +1233,7 @@ class KyrosPanel(QMainWindow):
         self.move(hidden)
 
     def _setup_panel_controls(self):
-        self._gear_btn = GlyphButton("gear", self, size=28)
+        self._gear_btn = GlyphButton("gear", self, size=26)
         self._position_gear_button()
         self._gear_btn.setToolTip("Ayarlar")
         self._gear_btn.clicked.connect(self._open_api_settings)
@@ -1243,10 +1242,7 @@ class KyrosPanel(QMainWindow):
 
     def _position_gear_button(self):
         content_left = (self.width() - PANEL_W) // 2
-        self._gear_btn.move(
-            content_left + PANEL_W - ISLAND_SHOULDER_WIDTH - 35,
-            19,
-        )
+        self._gear_btn.move(content_left + PANEL_W - 48, 20)
 
     def _setup_statusbar_item(self):
         """Menubar'da status bar item olustur (Textream gibi)."""
@@ -1352,13 +1348,30 @@ class KyrosPanel(QMainWindow):
 
         self._settings_open = False
         if self._settings_pane is not None:
+            self._settings_fade = QPropertyAnimation(
+                self._settings_pane, b"windowOpacity", self
+            )
+            self._settings_fade.setDuration(140)
+            self._settings_fade.setStartValue(1.0)
+            self._settings_fade.setEndValue(0.0)
+            self._settings_fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._settings_fade.finished.connect(self._start_settings_collapse)
+            self._settings_fade.start()
+            return
+
+        self._start_settings_collapse()
+
+    def _start_settings_collapse(self):
+        from PyQt6.QtCore import QEasingCurve
+
+        if self._settings_pane is not None:
             self._settings_pane.hide()
 
         screen = QApplication.primaryScreen().geometry()
         target_x = screen.x() + (screen.width() - PANEL_W) // 2
         target = QRect(target_x, screen.y(), PANEL_W, PANEL_H)
         self._settings_anim = QPropertyAnimation(self, b"geometry", self)
-        self._settings_anim.setDuration(300)
+        self._settings_anim.setDuration(340)
         self._settings_anim.setStartValue(self.geometry())
         self._settings_anim.setEndValue(target)
         self._settings_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
@@ -1536,10 +1549,6 @@ class KyrosPanel(QMainWindow):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(0, 0, 0, 255))
         p.drawPath(path)
-        border_pen = QPen(QColor(90, 100, 150, 75), 1.0)
-        p.setPen(border_pen)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawPath(self._island_path(close_top=False))
         p.restore()
 
     def _draw_top_seal(self, p):
@@ -1550,47 +1559,30 @@ class KyrosPanel(QMainWindow):
         p.drawRect(QRectF(0, 0, self.width(), 2))
         p.restore()
 
-    def _island_path(self, close_top=True):
-        """Top-attached island with continuous, tangent-matched oval shoulders."""
+    def _island_path(self):
+        """Compact top-attached island without a visible outer wall."""
         left = 0.0
         top = 0.0
         right = float(self.width())
         bottom = float(self.height())
-        shoulder = float(ISLAND_SHOULDER_WIDTH)
-        depth = float(ISLAND_SHOULDER_DEPTH)
+        inset = float(ISLAND_TOP_INSET)
         radius = float(ISLAND_BOTTOM_RADIUS)
-        # Cubic control points keep both ends tangent to the screen edge and
-        # panel wall. This avoids the small kink produced by a quadratic arc.
-        shoulder_control_x = shoulder * 0.55228475
-        shoulder_control_y = depth * (1.0 - 0.55228475)
-        corner_control = radius * 0.55228475
 
         path = QPainterPath(QPointF(left, top))
-        path.cubicTo(
-            QPointF(left + shoulder_control_x, top),
-            QPointF(left + shoulder, top + shoulder_control_y),
-            QPointF(left + shoulder, top + depth),
+        path.quadTo(QPointF(left + inset, top), QPointF(left + inset, top + inset))
+        path.lineTo(QPointF(left + inset, bottom - radius))
+        path.quadTo(
+            QPointF(left + inset, bottom),
+            QPointF(left + inset + radius, bottom),
         )
-        path.lineTo(QPointF(left + shoulder, bottom - radius))
-        path.cubicTo(
-            QPointF(left + shoulder, bottom - radius + corner_control),
-            QPointF(left + shoulder + radius - corner_control, bottom),
-            QPointF(left + shoulder + radius, bottom),
+        path.lineTo(QPointF(right - inset - radius, bottom))
+        path.quadTo(
+            QPointF(right - inset, bottom),
+            QPointF(right - inset, bottom - radius),
         )
-        path.lineTo(QPointF(right - shoulder - radius, bottom))
-        path.cubicTo(
-            QPointF(right - shoulder - radius + corner_control, bottom),
-            QPointF(right - shoulder, bottom - radius + corner_control),
-            QPointF(right - shoulder, bottom - radius),
-        )
-        path.lineTo(QPointF(right - shoulder, top + depth))
-        path.cubicTo(
-            QPointF(right - shoulder, top + shoulder_control_y),
-            QPointF(right - shoulder_control_x, top),
-            QPointF(right, top),
-        )
-        if close_top:
-            path.closeSubpath()
+        path.lineTo(QPointF(right - inset, top + inset))
+        path.quadTo(QPointF(right - inset, top), QPointF(right, top))
+        path.closeSubpath()
         return path
 
     def _draw_lights(self, p, t):
