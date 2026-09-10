@@ -1041,6 +1041,41 @@ class ApiSettingsDialog(QDialog):
             QMessageBox.critical(self, "Hata", f"Kaydedilemedi: {e}")
 
 
+class StatusBarHandler:
+    """NSStatusBar tiklama olaylarini handley eden handler."""
+    def click_(self, sender):
+        try:
+            panel = self.panel
+            if panel._panel_visible:
+                panel._hide_panel()
+            else:
+                panel.slide_in()
+        except Exception:
+            pass
+
+    def togglePanel_(self, sender):
+        try:
+            panel = self.panel
+            if panel._panel_visible:
+                panel._hide_panel()
+            else:
+                panel.slide_in()
+        except Exception:
+            pass
+
+    def openSettings_(self, sender):
+        try:
+            QTimer.singleShot(0, self.panel._open_api_settings)
+        except Exception:
+            pass
+
+    def quitApp_(self, sender):
+        try:
+            QTimer.singleShot(0, QApplication.instance().quit)
+        except Exception:
+            pass
+
+
 class KyrosPanel(QMainWindow):
     def __init__(self, kyros=None):
         super().__init__()
@@ -1121,7 +1156,7 @@ class KyrosPanel(QMainWindow):
         """Menubar'da status bar item olustur (Textream gibi)."""
         try:
             import objc
-            from AppKit import NSStatusBar, NSImage, NSMenu, NSMenuItem, NSObject
+            from AppKit import NSStatusBar, NSImage, NSMenu, NSMenuItem
 
             self._statusbar = NSStatusBar.systemStatusBar()
             self._statusitem = self._statusbar.statusItemWithLength_(-2)
@@ -1132,16 +1167,20 @@ class KyrosPanel(QMainWindow):
             self._statusitem.button().setImage_(img)
             self._statusitem.button().setToolTip_("Kyros Asistani")
 
-            self._statusitem.button().setTarget_(self)
-            self._statusitem.button().setAction_(objc.selector(self._on_statusbar_click, signature=b"v@:@"))
+            handler = StatusBarHandler.alloc().init()
+            handler.panel = self
+            self._statusbar_handler = handler
+
+            self._statusitem.button().setTarget_(handler)
+            self._statusitem.button().setAction_(objc.selector(handler.click_, signature=b"v@:@"))
 
             menu = NSMenu.alloc().init()
 
             toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                 "Paneli Goster/Gizle", "togglePanel:", ""
             )
-            toggle_item.setTarget_(self)
-            toggle_item.setAction_(objc.selector(self._toggle_panel, signature=b"v@:@"))
+            toggle_item.setTarget_(handler)
+            toggle_item.setAction_(objc.selector(handler.togglePanel_, signature=b"v@:@"))
             menu.addItem_(toggle_item)
 
             menu.addItem_(NSMenuItem.separatorItem())
@@ -1149,8 +1188,8 @@ class KyrosPanel(QMainWindow):
             settings_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                 "Ayarlar", "openSettings:", ""
             )
-            settings_item.setTarget_(self)
-            settings_item.setAction_(objc.selector(self._open_settings_from_menu, signature=b"v@:@"))
+            settings_item.setTarget_(handler)
+            settings_item.setAction_(objc.selector(handler.openSettings_, signature=b"v@:@"))
             menu.addItem_(settings_item)
 
             menu.addItem_(NSMenuItem.separatorItem())
@@ -1158,35 +1197,14 @@ class KyrosPanel(QMainWindow):
             quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                 "Cikis", "quitApp:", ""
             )
-            quit_item.setTarget_(self)
-            quit_item.setAction_(objc.selector(self._quit_app, signature=b"v@:@"))
+            quit_item.setTarget_(handler)
+            quit_item.setAction_(objc.selector(handler.quitApp_, signature=b"v@:@"))
             menu.addItem_(quit_item)
 
             self._statusitem.setMenu_(menu)
 
         except Exception as e:
             logging.getLogger("kyros").warning("Status bar item olusturulamadi: %s", e)
-
-    def _on_statusbar_click_(self, sender):
-        pass
-
-    def _toggle_panel_(self, sender):
-        if self._panel_visible:
-            self._hide_panel()
-        else:
-            self.slide_in()
-
-    def _open_settings_from_menu_(self, sender):
-        QTimer.singleShot(0, self._open_api_settings)
-
-    def _quit_app_(self, sender):
-        QTimer.singleShot(0, QApplication.instance().quit)
-
-    def _on_statusbar_click(self, sender):
-        if self._panel_visible:
-            self._hide_panel()
-        else:
-            self.slide_in()
 
     def _check_api_on_startup(self):
         try:
