@@ -121,7 +121,7 @@ PANEL_H = 100
 EXPANDED_W = 520
 EXPANDED_H = 650
 SETTINGS_TOP = 86
-ISLAND_SHOULDER_WIDTH = 22
+ISLAND_SHOULDER_WIDTH = 38
 ISLAND_SHOULDER_DEPTH = 18
 ISLAND_BOTTOM_RADIUS = 24
 ORB_COUNT = 3
@@ -1221,11 +1221,18 @@ class KyrosPanel(QMainWindow):
 
     def _setup_panel_controls(self):
         self._gear_btn = GlyphButton("gear", self, size=28)
-        self._gear_btn.move(PANEL_W - 42, 19)
+        self._position_gear_button()
         self._gear_btn.setToolTip("Ayarlar")
         self._gear_btn.clicked.connect(self._open_api_settings)
         self._gear_btn.show()
         self._gear_btn.raise_()
+
+    def _position_gear_button(self):
+        content_left = (self.width() - PANEL_W) // 2
+        self._gear_btn.move(
+            content_left + PANEL_W - ISLAND_SHOULDER_WIDTH - 20,
+            19,
+        )
 
     def _setup_statusbar_item(self):
         """Menubar'da status bar item olustur (Textream gibi)."""
@@ -1466,8 +1473,7 @@ class KyrosPanel(QMainWindow):
 
     def resizeEvent(self, event):
         if hasattr(self, "_gear_btn"):
-            content_left = (self.width() - PANEL_W) // 2
-            self._gear_btn.move(content_left + PANEL_W - 42, 19)
+            self._position_gear_button()
             self._gear_btn.raise_()
         self._layout_settings_pane()
         super().resizeEvent(event)
@@ -1541,8 +1547,8 @@ class KyrosPanel(QMainWindow):
         radius = float(ISLAND_BOTTOM_RADIUS)
         # Cubic control points keep both ends tangent to the screen edge and
         # panel wall. This avoids the small kink produced by a quadratic arc.
-        shoulder_control_x = shoulder * 0.58
-        shoulder_control_y = depth * 0.48
+        shoulder_control_x = shoulder * 0.55228475
+        shoulder_control_y = depth * (1.0 - 0.55228475)
         corner_control = radius * 0.55228475
 
         path = QPainterPath(QPointF(left, top))
