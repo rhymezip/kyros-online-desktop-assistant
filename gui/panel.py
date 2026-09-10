@@ -20,10 +20,12 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QGraphicsDropShadowEffect,
     QWidget,
+    QListView,
 )
 from PyQt6.QtCore import (
     Qt,
     QTimer,
+    QRect,
     QRectF,
     QPointF,
     QPropertyAnimation,
@@ -36,7 +38,7 @@ from PyQt6.QtGui import (
     QColor,
     QPen,
     QBrush,
-    QLinearGradient,
+    QRadialGradient,
     QPainterPath,
     QFont,
     QFontMetrics,
@@ -293,6 +295,12 @@ class ModernComboBox(QComboBox):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setMinimumHeight(38)
+        popup = QListView(self)
+        popup.setObjectName("comboPopup")
+        popup.setSpacing(2)
+        popup.setUniformItemSizes(True)
+        self.setView(popup)
+        self.setMaxVisibleItems(7)
         self.setStyleSheet("""
             QComboBox {
                 background: #0c0c0e;
@@ -314,30 +322,43 @@ class ModernComboBox(QComboBox):
             }
             QComboBox::drop-down {
                 border: none;
-                width: 28px;
+                width: 34px;
                 subcontrol-position: center right;
             }
             QComboBox::down-arrow {
                 width: 0; height: 0; border: none;
             }
             QComboBox QAbstractItemView {
-                background-color: #0a0a0c;
+                background-color: #070708;
                 color: #f2f2f5;
                 border: 1px solid #28282d;
-                border-radius: 8px;
+                border-radius: 10px;
                 selection-background-color: #202027;
-                padding: 6px;
+                padding: 7px;
                 outline: none;
             }
             QComboBox QAbstractItemView::item {
                 padding: 8px 12px;
                 border-radius: 6px;
-                min-height: 24px;
+                min-height: 28px;
             }
             QComboBox QAbstractItemView::item:hover {
                 background: #18181d;
             }
         """)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(145, 145, 154), 1.4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        x = self.width() - 17
+        y = self.height() / 2 - 1
+        p.drawLine(QPointF(x - 3.5, y - 1.5), QPointF(x, y + 2))
+        p.drawLine(QPointF(x, y + 2), QPointF(x + 3.5, y - 1.5))
+        p.end()
 
 
 class ModernLineEdit(QLineEdit):
@@ -456,9 +477,10 @@ class ModernButton(QPushButton):
 class GlyphButton(QPushButton):
     """Small vector-only control; avoids font-dependent emoji glyphs."""
 
-    def __init__(self, glyph, parent=None, size=30):
+    def __init__(self, glyph, parent=None, size=30, surface=False):
         super().__init__(parent)
         self.glyph = glyph
+        self.surface = surface
         self.setFixedSize(size, size)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet("background: transparent; border: none;")
@@ -466,9 +488,15 @@ class GlyphButton(QPushButton):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if self.underMouse() or self.isDown():
+        if self.surface or self.underMouse() or self.isDown():
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(255, 255, 255, 26 if self.isDown() else 17))
+            if self.isDown():
+                alpha = 32
+            elif self.underMouse():
+                alpha = 23
+            else:
+                alpha = 12
+            p.setBrush(QColor(255, 255, 255, alpha))
             p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 8, 8)
 
         color = QColor(110, 110, 118) if not self.isEnabled() else QColor(225, 225, 232)
@@ -494,6 +522,10 @@ class GlyphButton(QPushButton):
             p.drawArc(arc, 35 * 16, 285 * 16)
             p.drawLine(QPointF(cx + 5.7, cy - 5.1), QPointF(cx + 7.4, cy - 0.7))
             p.drawLine(QPointF(cx + 5.7, cy - 5.1), QPointF(cx + 1.3, cy - 4.5))
+        elif self.glyph == "back":
+            p.drawLine(QPointF(cx + 5, cy - 6), QPointF(cx - 1, cy))
+            p.drawLine(QPointF(cx - 1, cy), QPointF(cx + 5, cy + 6))
+            p.drawLine(QPointF(cx - 1, cy), QPointF(cx + 8, cy))
         p.end()
 
 
@@ -566,12 +598,16 @@ class ApiSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Kyros Ayarları")
-        self.setMinimumSize(500, 480)
-        self.resize(520, 640)
+        self.setMinimumSize(0, 0)
         self.setModal(True)
+        self._closing = False
         self._input_devices = []
         self._output_devices = []
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setStyleSheet(self._style())
         self._test_result.connect(self._on_test_result)
         self._save_result.connect(self._on_save_result)
@@ -579,7 +615,7 @@ class ApiSettingsDialog(QDialog):
         self._devices_fetched.connect(self._on_devices_fetched)
         self._build_ui()
         self._load_current()
-        self._animate_open()
+        QTimer.singleShot(0, self._animate_window_open)
 
     def _style(self):
         return """
@@ -652,6 +688,10 @@ class ApiSettingsDialog(QDialog):
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(28, 20, 28, 12)
         header_layout.setSpacing(12)
+        self.back_btn = GlyphButton("back", size=32, surface=True)
+        self.back_btn.setToolTip("Geri")
+        self.back_btn.clicked.connect(self.reject)
+        header_layout.addWidget(self.back_btn)
         header_layout.addWidget(BrandMark())
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
@@ -782,7 +822,7 @@ class ApiSettingsDialog(QDialog):
         audio_header.addStretch()
         self.spinner = LoadingSpinner()
         audio_header.addWidget(self.spinner)
-        self.refresh_devices_btn = GlyphButton("refresh")
+        self.refresh_devices_btn = GlyphButton("refresh", size=32, surface=True)
         self.refresh_devices_btn.setToolTip("Mevcut ses aygıtlarını yeniden listele")
         self.refresh_devices_btn.clicked.connect(self._refresh_devices_async)
         audio_header.addWidget(self.refresh_devices_btn)
@@ -849,6 +889,65 @@ class ApiSettingsDialog(QDialog):
         # Store cards for animation
         self._cards = [api_card, model_card, audio_card]
 
+    def _target_geometry(self):
+        parent = self.parentWidget()
+        if parent is not None:
+            parent_frame = parent.frameGeometry()
+            center_x = parent_frame.center().x()
+            top = parent_frame.top() + PANEL_H - 10
+        else:
+            screen = QApplication.primaryScreen().geometry()
+            center_x = screen.center().x()
+            top = screen.top() + PANEL_H - 10
+        return QRect(center_x - 260, top, 520, 640)
+
+    def _animate_window_open(self):
+        from PyQt6.QtCore import QEasingCurve
+
+        target = self._target_geometry()
+        start = QRect(target.center().x() - 150, target.top(), 300, 8)
+        self.setGeometry(start)
+        self._window_anim = QPropertyAnimation(self, b"geometry", self)
+        self._window_anim.setDuration(380)
+        self._window_anim.setStartValue(start)
+        self._window_anim.setEndValue(target)
+        self._window_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._window_anim.finished.connect(self._finish_window_open)
+        self._window_anim.start()
+
+    def _finish_window_open(self):
+        self.setMinimumSize(500, 480)
+        self._animate_open()
+
+    def _collapse_and_finish(self, accepted):
+        if self._closing:
+            return
+        self._closing = True
+        from PyQt6.QtCore import QEasingCurve
+
+        current = self.geometry()
+        end = QRect(current.center().x() - 150, current.top(), 300, 8)
+        self.setMinimumSize(0, 0)
+        self._window_anim = QPropertyAnimation(self, b"geometry", self)
+        self._window_anim.setDuration(260)
+        self._window_anim.setStartValue(current)
+        self._window_anim.setEndValue(end)
+        self._window_anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        self._collapse_result = (
+            QDialog.DialogCode.Accepted if accepted else QDialog.DialogCode.Rejected
+        )
+        self._window_anim.finished.connect(self._finish_collapse)
+        self._window_anim.start()
+
+    def _finish_collapse(self):
+        QDialog.done(self, self._collapse_result)
+
+    def accept(self):
+        self._collapse_and_finish(True)
+
+    def reject(self):
+        self._collapse_and_finish(False)
+
     def _animate_open(self):
         """Staggered fade-in animation for all cards."""
         from PyQt6.QtCore import QSequentialAnimationGroup, QEasingCurve
@@ -911,6 +1010,7 @@ class ApiSettingsDialog(QDialog):
 
     def _refresh_devices_async(self):
         self.refresh_devices_btn.setEnabled(False)
+        self.refresh_devices_btn.hide()
         self.spinner.start()
         def run():
             try:
@@ -924,6 +1024,7 @@ class ApiSettingsDialog(QDialog):
     def _on_devices_fetched(self, devices):
         self.refresh_devices_btn.setEnabled(True)
         self.spinner.stop()
+        self.refresh_devices_btn.show()
         self._input_devices = devices.get("input_devices", [])
         self._output_devices = devices.get("output_devices", [])
         self._populate_device_combos()
@@ -1493,40 +1594,28 @@ class KyrosPanel(QMainWindow):
         return path
 
     def _draw_lights(self, p, t):
-        """Draw three flowing light ribbons that blend without circular blobs."""
+        """Draw three soft light spheres that drift through and blend together."""
         p.save()
         p.setClipPath(self._island_path())
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
 
+        anchors = (72, 150, 228)
         for i in range(ORB_COUNT):
             c = self._cur_orb[i]
-            phase = t * (0.24 + i * 0.035) + i * 2.15
-            center_y = 43 + math.sin(phase * 0.72) * 8 + (i - 1) * 5
-            path = QPainterPath(QPointF(-45, center_y + math.sin(phase) * 12))
-            path.cubicTo(
-                QPointF(45, center_y - 22 + math.sin(phase + 0.8) * 13),
-                QPointF(105, center_y + 26 + math.cos(phase * 1.15) * 11),
-                QPointF(165, center_y - 4 + math.sin(phase + 1.9) * 15),
-            )
-            path.cubicTo(
-                QPointF(220, center_y - 24 + math.cos(phase + 0.5) * 12),
-                QPointF(270, center_y + 22 + math.sin(phase * 0.9) * 14),
-                QPointF(PANEL_W + 45, center_y + math.cos(phase) * 10),
-            )
+            phase = t * (0.31 + i * 0.035) + i * 2.1
+            cx = anchors[i] + math.sin(phase) * 30 + math.sin(phase * 0.43) * 12
+            cy = 43 + math.cos(phase * 0.77) * 12 + (i - 1) * 3
+            radius = 68 + math.sin(phase * 0.55) * 7
 
-            for width, alpha in ((52, 8), (34, 12), (20, 20), (8, 31)):
-                gradient = QLinearGradient(0, center_y, PANEL_W, center_y)
-                gradient.setColorAt(0.0, QColor(int(c[0]), int(c[1]), int(c[2]), 0))
-                gradient.setColorAt(0.22, QColor(int(c[0]), int(c[1]), int(c[2]), alpha))
-                gradient.setColorAt(0.55, QColor(int(c[0]), int(c[1]), int(c[2]), alpha + 8))
-                gradient.setColorAt(0.86, QColor(int(c[0]), int(c[1]), int(c[2]), alpha))
-                gradient.setColorAt(1.0, QColor(int(c[0]), int(c[1]), int(c[2]), 0))
-                pen = QPen(QBrush(gradient), width)
-                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                p.setPen(pen)
-                p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawPath(path)
+            glow = QRadialGradient(QPointF(cx, cy), radius)
+            glow.setColorAt(0.0, QColor(int(c[0]), int(c[1]), int(c[2]), 112))
+            glow.setColorAt(0.24, QColor(int(c[0]), int(c[1]), int(c[2]), 76))
+            glow.setColorAt(0.55, QColor(int(c[0]), int(c[1]), int(c[2]), 30))
+            glow.setColorAt(0.82, QColor(int(c[0]), int(c[1]), int(c[2]), 8))
+            glow.setColorAt(1.0, QColor(int(c[0]), int(c[1]), int(c[2]), 0))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(glow))
+            p.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2, radius * 2))
         p.restore()
 
     def _draw_mic_bars(self, p, t):
