@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QMessageBox,
     QGraphicsDropShadowEffect,
+    QWidget,
 )
 from PyQt6.QtCore import (
     Qt,
@@ -35,7 +36,7 @@ from PyQt6.QtGui import (
     QColor,
     QPen,
     QBrush,
-    QRadialGradient,
+    QLinearGradient,
     QPainterPath,
     QFont,
     QFontMetrics,
@@ -138,6 +139,14 @@ class PanelSignals(QObject):
 
 def lerp(a, b, t):
     return a + (b - a) * t
+
+
+def emit_if_alive(signal, *args):
+    """Ignore a late worker result after its Qt receiver has been destroyed."""
+    try:
+        signal.emit(*args)
+    except RuntimeError:
+        pass
 
 
 def panel_positions(screen, panel_width=PANEL_W, panel_height=PANEL_H):
@@ -286,10 +295,9 @@ class ModernComboBox(QComboBox):
         self.setMinimumHeight(38)
         self.setStyleSheet("""
             QComboBox {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1e1e2a, stop:1 #181822);
-                color: #e8e8f0;
-                border: 1px solid #2a2a3a;
+                background: #0c0c0e;
+                color: #f2f2f5;
+                border: 1px solid #242428;
                 border-radius: 10px;
                 padding: 10px 14px;
                 font-size: 12px;
@@ -297,14 +305,12 @@ class ModernComboBox(QComboBox):
                 selection-background-color: #3a3a5a;
             }
             QComboBox:hover {
-                border: 1px solid #4a5080;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #22223a, stop:1 #1c1c2c);
+                border: 1px solid #45454d;
+                background: #111114;
             }
             QComboBox:focus {
-                border: 1px solid #6b7bff;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #242440, stop:1 #1e1e32);
+                border: 1px solid #7d85ff;
+                background: #111114;
             }
             QComboBox::drop-down {
                 border: none;
@@ -315,11 +321,11 @@ class ModernComboBox(QComboBox):
                 width: 0; height: 0; border: none;
             }
             QComboBox QAbstractItemView {
-                background-color: #1a1a28;
-                color: #e8e8f0;
-                border: 1px solid #3a3a50;
+                background-color: #0a0a0c;
+                color: #f2f2f5;
+                border: 1px solid #28282d;
                 border-radius: 8px;
-                selection-background-color: #2e2e4a;
+                selection-background-color: #202027;
                 padding: 6px;
                 outline: none;
             }
@@ -329,8 +335,7 @@ class ModernComboBox(QComboBox):
                 min-height: 24px;
             }
             QComboBox QAbstractItemView::item:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #2a2a4a, stop:1 #32325a);
+                background: #18181d;
             }
         """)
 
@@ -341,10 +346,9 @@ class ModernLineEdit(QLineEdit):
         super().__init__(*args, **kwargs)
         self.setStyleSheet("""
             QLineEdit {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1e1e2a, stop:1 #181822);
-                color: #e8e8f0;
-                border: 1px solid #2a2a3a;
+                background: #0c0c0e;
+                color: #f2f2f5;
+                border: 1px solid #242428;
                 border-radius: 10px;
                 padding: 11px 14px;
                 font-size: 12px;
@@ -352,12 +356,11 @@ class ModernLineEdit(QLineEdit):
                 selection-background-color: #4a4a6a;
             }
             QLineEdit:hover {
-                border: 1px solid #4a5080;
+                border: 1px solid #45454d;
             }
             QLineEdit:focus {
-                border: 1px solid #6b7bff;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #242440, stop:1 #1e1e32);
+                border: 1px solid #7d85ff;
+                background: #111114;
             }
         """)
 
@@ -407,22 +410,20 @@ class ModernButton(QPushButton):
         elif self._variant == "secondary":
             self.setStyleSheet("""
                 QPushButton {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 #1e1e2a, stop:1 #181822);
-                    color: #c0c0d0;
-                    border: 1px solid #2a2a3a;
+                    background: #101012;
+                    color: #d8d8de;
+                    border: 1px solid #29292e;
                     border-radius: 11px;
                     padding: 10px 20px;
                     font-size: 12px;
                     font-weight: 600;
                 }
                 QPushButton:hover {
-                    border: 1px solid #4a5080;
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 #24243a, stop:1 #1e1e2e);
+                    border: 1px solid #4b4b54;
+                    background: #18181c;
                 }
                 QPushButton:pressed {
-                    background: #1a1a28;
+                    background: #08080a;
                     padding-top: 11px; padding-bottom: 9px;
                 }
             """)
@@ -438,8 +439,8 @@ class ModernButton(QPushButton):
                     font-weight: 600;
                 }
                 QPushButton:hover {
-                    color: #b0b0d0;
-                    background: rgba(90, 100, 160, 40);
+                    color: #ededf2;
+                    background: rgba(255, 255, 255, 18);
                 }
             """)
 
@@ -452,14 +453,80 @@ class ModernButton(QPushButton):
         super().leaveEvent(event)
 
 
-class LoadingSpinner(QLabel):
-    """Animated loading spinner."""
+class GlyphButton(QPushButton):
+    """Small vector-only control; avoids font-dependent emoji glyphs."""
+
+    def __init__(self, glyph, parent=None, size=30):
+        super().__init__(parent)
+        self.glyph = glyph
+        self.setFixedSize(size, size)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("background: transparent; border: none;")
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.underMouse() or self.isDown():
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(255, 255, 255, 26 if self.isDown() else 17))
+            p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 8, 8)
+
+        color = QColor(110, 110, 118) if not self.isEnabled() else QColor(225, 225, 232)
+        pen = QPen(color, 1.55)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        cx = self.width() / 2
+        cy = self.height() / 2
+
+        if self.glyph == "gear":
+            p.drawEllipse(QPointF(cx, cy), 5.2, 5.2)
+            p.drawEllipse(QPointF(cx, cy), 1.8, 1.8)
+            for index in range(8):
+                angle = math.pi * index / 4
+                p.drawLine(
+                    QPointF(cx + math.cos(angle) * 6.2, cy + math.sin(angle) * 6.2),
+                    QPointF(cx + math.cos(angle) * 8.2, cy + math.sin(angle) * 8.2),
+                )
+        elif self.glyph == "refresh":
+            arc = QRectF(cx - 7, cy - 7, 14, 14)
+            p.drawArc(arc, 35 * 16, 285 * 16)
+            p.drawLine(QPointF(cx + 5.7, cy - 5.1), QPointF(cx + 7.4, cy - 0.7))
+            p.drawLine(QPointF(cx + 5.7, cy - 5.1), QPointF(cx + 1.3, cy - 4.5))
+        p.end()
+
+
+class BrandMark(QWidget):
+    """Compact vector Kyros mark for the settings header."""
+
     def __init__(self, parent=None):
-        super().__init__("⟳", parent)
-        self.setStyleSheet("""
-            font-size: 16px; color: #6b7bff;
-            background: transparent; border: none;
-        """)
+        super().__init__(parent)
+        self.setFixedSize(34, 34)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(QColor(255, 255, 255, 28), 1))
+        p.setBrush(QColor(8, 8, 10))
+        p.drawRoundedRect(QRectF(0.5, 0.5, 33, 33), 10, 10)
+        colors = (QColor(80, 205, 255), QColor(120, 240, 195), QColor(180, 130, 255))
+        for index, color in enumerate(colors):
+            path = QPainterPath(QPointF(7, 18 + index * 2))
+            path.cubicTo(QPointF(12, 7 + index), QPointF(20, 27 - index), QPointF(27, 14 + index))
+            pen = QPen(color, 1.8)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(pen)
+            p.drawPath(path)
+        p.end()
+
+
+class LoadingSpinner(QWidget):
+    """Animated vector loading spinner."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(22, 22)
         self._angle = 0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._rotate)
@@ -476,11 +543,16 @@ class LoadingSpinner(QLabel):
 
     def _rotate(self):
         self._angle = (self._angle + 12) % 360
-        self.setStyleSheet(f"""
-            font-size: 16px; color: #6b7bff;
-            background: transparent; border: none;
-            transform: rotate({self._angle}deg);
-        """)
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(125, 135, 255), 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawArc(QRectF(4, 4, 14, 14), self._angle * 16, 245 * 16)
+        p.end()
 
 
 class ApiSettingsDialog(QDialog):
@@ -494,8 +566,8 @@ class ApiSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Kyros Ayarları")
-        self.setMinimumSize(480, 400)
-        self.resize(480, 520)
+        self.setMinimumSize(500, 480)
+        self.resize(520, 640)
         self.setModal(True)
         self._input_devices = []
         self._output_devices = []
@@ -512,11 +584,10 @@ class ApiSettingsDialog(QDialog):
     def _style(self):
         return """
         QDialog {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #0a0a10, stop:0.5 #0f0f18, stop:1 #0a0a12);
-            color: #e8e8ec;
+            background: #000000;
+            color: #eeeef2;
             border-radius: 18px;
-            border: 1px solid rgba(80, 90, 140, 50);
+            border: 1px solid #202024;
         }
         QLabel {
             color: #e8e8ec;
@@ -531,19 +602,19 @@ class ApiSettingsDialog(QDialog):
         }
         QLabel#dialogSubtitle {
             font-size: 11px;
-            color: #6a7294;
+            color: #77777f;
             letter-spacing: 0.2px;
         }
         QLabel#sectionTitle {
             font-size: 10px;
             font-weight: 700;
-            color: #7a82a8;
+            color: #a0a0aa;
             letter-spacing: 1.5px;
         }
         QLabel#fieldLabel {
             font-size: 11px;
             font-weight: 600;
-            color: #8a90b0;
+            color: #92929c;
             letter-spacing: 0.3px;
         }
         QLabel#status {
@@ -554,23 +625,22 @@ class ApiSettingsDialog(QDialog):
         }
         QFrame#divider {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 transparent, stop:0.5 rgba(80, 90, 160, 80), stop:1 transparent);
+                stop:0 transparent, stop:0.5 rgba(255, 255, 255, 38), stop:1 transparent);
             max-height: 1px;
             border: none;
         }
         QFrame#sectionCard {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 rgba(25, 25, 40, 200), stop:1 rgba(18, 18, 28, 180));
-            border: 1px solid rgba(70, 80, 130, 50);
+            background: #0a0a0c;
+            border: 1px solid #1d1d21;
             border-radius: 14px;
         }
         QFrame#sectionCard:hover {
-            border: 1px solid rgba(90, 100, 160, 90);
+            border: 1px solid #303036;
         }
         """
 
     def _build_ui(self):
-        from PyQt6.QtWidgets import QScrollArea, QWidget
+        from PyQt6.QtWidgets import QScrollArea
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -582,9 +652,7 @@ class ApiSettingsDialog(QDialog):
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(28, 20, 28, 12)
         header_layout.setSpacing(12)
-        icon_label = QLabel("⚡")
-        icon_label.setStyleSheet("font-size: 24px; background: transparent; border: none;")
-        header_layout.addWidget(icon_label)
+        header_layout.addWidget(BrandMark())
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
         title = QLabel("Kyros Ayarları")
@@ -616,18 +684,18 @@ class ApiSettingsDialog(QDialog):
                 background: transparent;
             }
             QScrollBar:vertical {
-                background: rgba(30, 30, 50, 100);
+                background: #09090b;
                 width: 8px;
                 border-radius: 4px;
                 margin: 0;
             }
             QScrollBar::handle:vertical {
-                background: rgba(100, 110, 180, 120);
+                background: #34343a;
                 border-radius: 4px;
                 min-height: 30px;
             }
             QScrollBar::handle:vertical:hover {
-                background: rgba(100, 110, 180, 180);
+                background: #4b4b53;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0;
@@ -652,7 +720,7 @@ class ApiSettingsDialog(QDialog):
         api_card_layout.addWidget(api_section_title)
 
         api_desc = QLabel("Gemini API erişimi için anahtarınızı girin")
-        api_desc.setStyleSheet("font-size: 10px; color: #5a6080; padding: 0 0 4px 0; border: none;")
+        api_desc.setStyleSheet("font-size: 10px; color: #696971; padding: 0 0 4px 0; border: none;")
         api_card_layout.addWidget(api_desc)
 
         api_row = QHBoxLayout()
@@ -681,7 +749,7 @@ class ApiSettingsDialog(QDialog):
         model_card_layout.addWidget(model_section_title)
 
         model_desc = QLabel("Sadece listedeki modeller çalışır — API ile doğrulanmış")
-        model_desc.setStyleSheet("font-size: 10px; color: #5a6080; padding: 0 0 4px 0; border: none;")
+        model_desc.setStyleSheet("font-size: 10px; color: #696971; padding: 0 0 4px 0; border: none;")
         model_card_layout.addWidget(model_desc)
 
         self.model_combo = ModernComboBox()
@@ -714,15 +782,14 @@ class ApiSettingsDialog(QDialog):
         audio_header.addStretch()
         self.spinner = LoadingSpinner()
         audio_header.addWidget(self.spinner)
-        self.refresh_devices_btn = ModernButton("↻ Yenile", "ghost")
-        self.refresh_devices_btn.setFixedSize(80, 30)
+        self.refresh_devices_btn = GlyphButton("refresh")
         self.refresh_devices_btn.setToolTip("Mevcut ses aygıtlarını yeniden listele")
         self.refresh_devices_btn.clicked.connect(self._refresh_devices_async)
         audio_header.addWidget(self.refresh_devices_btn)
         audio_card_layout.addLayout(audio_header)
 
         audio_desc = QLabel("Varsayılan olarak sistem aygıtları kullanılır")
-        audio_desc.setStyleSheet("font-size: 10px; color: #5a6080; padding: 0 0 4px 0; border: none;")
+        audio_desc.setStyleSheet("font-size: 10px; color: #696971; padding: 0 0 4px 0; border: none;")
         audio_card_layout.addWidget(audio_desc)
 
         # Input Device
@@ -772,8 +839,8 @@ class ApiSettingsDialog(QDialog):
         bottom_layout.addLayout(btn_row)
 
         # Hint
-        hint = QLabel("Değişiklikler anında aktif olur • Geçersiz API uyarı verir")
-        hint.setStyleSheet("color: #4a5070; font-size: 10px; background: transparent; border: none; letter-spacing: 0.2px;")
+        hint = QLabel("Değişiklikler anında aktif olur. Geçersiz API uyarı verir.")
+        hint.setStyleSheet("color: #5d5d65; font-size: 10px; background: transparent; border: none; letter-spacing: 0.2px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bottom_layout.addWidget(hint)
 
@@ -837,7 +904,7 @@ class ApiSettingsDialog(QDialog):
             try:
                 import config
                 models = config.fetch_voice_models(api_key)
-                self._models_fetched.emit(models, select_model or "")
+                emit_if_alive(self._models_fetched, models, select_model or "")
             except Exception:
                 pass
         threading.Thread(target=run, daemon=True).start()
@@ -849,9 +916,9 @@ class ApiSettingsDialog(QDialog):
             try:
                 from core.audio_io import list_audio_devices
                 devices = list_audio_devices()
-                self._devices_fetched.emit(devices)
             except Exception:
-                self._devices_fetched.emit({"input_devices": [], "output_devices": []})
+                devices = {"input_devices": [], "output_devices": []}
+            emit_if_alive(self._devices_fetched, devices)
         threading.Thread(target=run, daemon=True).start()
 
     def _on_devices_fetched(self, devices):
@@ -875,7 +942,7 @@ class ApiSettingsDialog(QDialog):
             name = dev.get("name", "Unknown")
             dev_id = str(dev.get("id", ""))
             is_default = dev.get("is_default", False)
-            display = f"● {name}" if is_default else f"  {name}"
+            display = f"{name} (Varsayılan)" if is_default else name
             self.input_combo.addItem(display, dev_id)
         if cur_input:
             idx = self.input_combo.findData(cur_input)
@@ -888,7 +955,7 @@ class ApiSettingsDialog(QDialog):
             name = dev.get("name", "Unknown")
             dev_id = str(dev.get("id", ""))
             is_default = dev.get("is_default", False)
-            display = f"● {name}" if is_default else f"  {name}"
+            display = f"{name} (Varsayılan)" if is_default else name
             self.output_combo.addItem(display, dev_id)
         if cur_output:
             idx = self.output_combo.findData(cur_output)
@@ -965,9 +1032,9 @@ class ApiSettingsDialog(QDialog):
                     msg = f"Mevcut API ile {msg}"
                 elif not using_existing and ok:
                     msg = f"Yeni API ile {msg}"
-                self._test_result.emit(ok, msg)
+                emit_if_alive(self._test_result, ok, msg)
             except Exception as e:
-                self._test_result.emit(False, f"Hata: {e}")
+                emit_if_alive(self._test_result, False, f"Hata: {e}")
         threading.Thread(target=run, daemon=True).start()
 
     def _handle_save_after_validate(self, api, model, ok, msg):
@@ -1013,9 +1080,9 @@ class ApiSettingsDialog(QDialog):
                     import config
                     ok, msg = config.validate_api_key(api, model)
                     # ana thread'e sinyal ile dön
-                    self._save_result.emit(ok, msg)
+                    emit_if_alive(self._save_result, ok, msg)
                 except Exception as e:
-                    self._save_result.emit(False, f"Doğrulama hatası: {e}")
+                    emit_if_alive(self._save_result, False, f"Doğrulama hatası: {e}")
             # tek seferlik bağlantı
             try:
                 self._save_result.disconnect()
@@ -1134,10 +1201,11 @@ class KyrosPanel(QMainWindow):
         self._tgt_dot = list(MODES["bekliyor"]["dot"])
 
         self._setup_window()
+        self._setup_panel_controls()
         self._init_timer()
         self._setup_statusbar_item()
         self.setToolTip(
-            "Tıkla: konuşma ve kontroller · Sağ tık: durdur / bekleme / mikrofon · ⚙: API / model"
+            "Sağ tık: durdur, bekleme ve mikrofon. Ayarlar için sağ üstteki düğmeyi kullanın."
         )
         QTimer.singleShot(900, self._check_api_on_startup)
 
@@ -1173,6 +1241,14 @@ class KyrosPanel(QMainWindow):
         screen = QApplication.primaryScreen().geometry()
         hidden, _ = panel_positions(screen)
         self.move(hidden)
+
+    def _setup_panel_controls(self):
+        self._gear_btn = GlyphButton("gear", self, size=28)
+        self._gear_btn.move(PANEL_W - 42, 19)
+        self._gear_btn.setToolTip("Ayarlar")
+        self._gear_btn.clicked.connect(self._open_api_settings)
+        self._gear_btn.show()
+        self._gear_btn.raise_()
 
     def _setup_statusbar_item(self):
         """Menubar'da status bar item olustur (Textream gibi)."""
@@ -1232,7 +1308,7 @@ class KyrosPanel(QMainWindow):
             import config
 
             if not getattr(config, "GEMINI_API_KEY", ""):
-                self._add_text("Sistem", "API anahtarı yok — menubar ⚙ ile Gemini API ekleyin.")
+                self._add_text("Sistem", "API anahtarı yok. Ayarlar düğmesinden Gemini API ekleyin.")
                 QTimer.singleShot(400, self._open_api_settings)
         except Exception:
             pass
@@ -1378,7 +1454,7 @@ class KyrosPanel(QMainWindow):
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         elapsed = time.time() - self.t0
         self._draw_background(p)
-        self._draw_orbs(p, elapsed)
+        self._draw_lights(p, elapsed)
         self._draw_mic_bars(p, elapsed)
         self._draw_label(p)
         p.end()
@@ -1416,25 +1492,41 @@ class KyrosPanel(QMainWindow):
         path.closeSubpath()
         return path
 
-    def _draw_orbs(self, p, t):
+    def _draw_lights(self, p, t):
+        """Draw three flowing light ribbons that blend without circular blobs."""
         p.save()
         p.setClipPath(self._island_path())
-        cx = PANEL_W / 2
-        cy = PANEL_H / 2
-        radii = [55, 40, 28]
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
+
         for i in range(ORB_COUNT):
-            ox = cx + math.sin(t * 0.3 + i * 2.1) * 35
-            oy = cy + math.cos(t * 0.22 + i * 1.7) * 12
-            r = radii[i]
             c = self._cur_orb[i]
-            grad = QRadialGradient(QPointF(ox, oy), r)
-            # Daha canlı orb'lar (alpha 120/90/50)
-            grad.setColorAt(0, QColor(int(c[0]), int(c[1]), int(c[2]), 120))
-            grad.setColorAt(0.5, QColor(int(c[0]), int(c[1]), int(c[2]), 90))
-            grad.setColorAt(1.0, QColor(int(c[0]), int(c[1]), int(c[2]), 50))
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(grad))
-            p.drawEllipse(QPointF(ox, oy), r, r)
+            phase = t * (0.24 + i * 0.035) + i * 2.15
+            center_y = 43 + math.sin(phase * 0.72) * 8 + (i - 1) * 5
+            path = QPainterPath(QPointF(-45, center_y + math.sin(phase) * 12))
+            path.cubicTo(
+                QPointF(45, center_y - 22 + math.sin(phase + 0.8) * 13),
+                QPointF(105, center_y + 26 + math.cos(phase * 1.15) * 11),
+                QPointF(165, center_y - 4 + math.sin(phase + 1.9) * 15),
+            )
+            path.cubicTo(
+                QPointF(220, center_y - 24 + math.cos(phase + 0.5) * 12),
+                QPointF(270, center_y + 22 + math.sin(phase * 0.9) * 14),
+                QPointF(PANEL_W + 45, center_y + math.cos(phase) * 10),
+            )
+
+            for width, alpha in ((52, 8), (34, 12), (20, 20), (8, 31)):
+                gradient = QLinearGradient(0, center_y, PANEL_W, center_y)
+                gradient.setColorAt(0.0, QColor(int(c[0]), int(c[1]), int(c[2]), 0))
+                gradient.setColorAt(0.22, QColor(int(c[0]), int(c[1]), int(c[2]), alpha))
+                gradient.setColorAt(0.55, QColor(int(c[0]), int(c[1]), int(c[2]), alpha + 8))
+                gradient.setColorAt(0.86, QColor(int(c[0]), int(c[1]), int(c[2]), alpha))
+                gradient.setColorAt(1.0, QColor(int(c[0]), int(c[1]), int(c[2]), 0))
+                pen = QPen(QBrush(gradient), width)
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                p.setPen(pen)
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawPath(path)
         p.restore()
 
     def _draw_mic_bars(self, p, t):
@@ -1510,7 +1602,7 @@ class KyrosPanel(QMainWindow):
                 "Mikrofonu aç" if self._mic_muted else "Mikrofonu kapat"
             )
             mute.triggered.connect(self._toggle_mic)
-            menu.addAction("Ayarlar ⚙", self._open_api_settings)
+            menu.addAction("Ayarlar", self._open_api_settings)
             menu.addAction("Çıkış", QApplication.instance().quit)
             menu.exec(event.globalPosition().toPoint())
 

@@ -62,31 +62,31 @@ No hardcoded commands. No separate STT/TTS pipeline. No regex matching.
 <tr>
 <td width="50%">
 
-**🎤 Live Audio**
+**Live Audio**
 Full-duplex voice with echo cancellation. 16 kHz mic input, 24 kHz TTS output, 20 ms chunks, 350 ms VAD.
 
-**🧠 Gemini Native Audio**
+**Gemini Native Audio**
 Uses `gemini-2.5-flash-native-audio` — a single model handles conversation, tool calling, and voice synthesis natively.
 
-**🖥️ Full Mac Control**
+**Full Mac Control**
 Shell commands, AppleScript/JXA, Accessibility API (click, drag, scroll, type, screenshot), app automation.
 
-**🔍 Google Search**
+**Google Search**
 Built-in web search tool bound directly to the Live session — no browser needed.
 
 </td>
 <td width="50%">
 
-**🎙️ Smart Session Management**
+**Smart Session Management**
 Wake with *Hey Kyros*, standby with *you can wait*, stop with *stop*. The model decides.
 
-**🛡️ Resilient Connection**
+**Resilient Connection**
 Session resumption, buffer recovery, automatic reconnection. Survives network hiccups.
 
-**🌊 Dynamic Island UI**
+**Dynamic Island UI**
 Floating 300×100 panel with transcript, mic level, settings, and right-click controls.
 
-**🔐 Secure by Design**
+**Secure by Design**
 API keys stored with `0600` permissions, never logged. Elevated commands use native macOS auth dialogs.
 
 </td>
@@ -280,7 +280,7 @@ Hey Kyros, what's the weather like in Istanbul right now?
 
 - **Left click** — Opens conversation view (transcript, source links, text input, controls)
 - **Right click** — Context menu (Wake / Stop / Wait / Mic toggle / Settings / Quit)
-- **Settings (⚙)** — API key, voice model selection, connection test
+- **Settings button** — API key, voice model selection, connection test
 
 ### Settings Panel
 
@@ -409,7 +409,7 @@ See [`MAC_TEST.md`](MAC_TEST.md) for the full manual acceptance test checklist c
 | Symptom | Solution |
 |---------|----------|
 | `Microphone failed to start` | System Settings → Privacy → Microphone → grant access to Kyros/Terminal/Python |
-| Stuck on `Connecting` | Check API key (Settings ⚙ → Test), verify network, check `logs/kyros.log` |
+| Stuck on `Connecting` | Check API key (Settings → Test), verify network, check `logs/kyros.log` |
 | `Received 1008 policy violation` | Model/API mismatch — select correct model in Settings |
 | `User location is not supported` | Google regional restriction — try VPN or different network |
 | Audio device changing loop | Bridge v5 debounce handles this; ensure latest `build_audio.sh` |

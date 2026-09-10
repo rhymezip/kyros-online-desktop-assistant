@@ -41,14 +41,13 @@ class ColorFormatter(logging.Formatter):
         ts = self.formatTime(record, "%H:%M:%S")
 
         if levelname == "ERROR":
-            icon = f"{color}{BOLD}✗"
-            prefix = f"{icon} {levelname}{RESET}"
+            prefix = f"{color}{BOLD}{levelname}{RESET}"
         elif levelname == "WARNING":
-            prefix = f"{color}⚠ {levelname}{RESET}"
+            prefix = f"{color}{levelname}{RESET}"
         elif levelname == "DEBUG":
-            prefix = f"{color}{DIM}▸ {levelname}{RESET}"
+            prefix = f"{color}{DIM}{levelname}{RESET}"
         else:
-            prefix = f"{color}● {levelname}{RESET}"
+            prefix = f"{color}{levelname}{RESET}"
 
         return f"{DIM}{ts}{RESET} {prefix} {DIM}[{module}]{RESET} {msg}"
 
@@ -144,14 +143,14 @@ def main():
         print("Kyros uygulaması macOS içindir.")
         return 1
     if not config.GEMINI_API_KEY and (args.text or args.no_panel):
-        print("Gemini API anahtarı eksik. Paneli açıp sağ üst ⚙ ile ekleyin.")
+        print("Gemini API anahtarı eksik. Paneli açıp sağ üstteki Ayarlar düğmesinden ekleyin.")
         return 1
 
     configure_logging(args.debug)
     log = logging.getLogger("kyros")
 
     if not config.GEMINI_API_KEY:
-        log.warning("API anahtarı yok — panel açılacak, sağ üst ⚙ ile ekleyin.")
+        log.warning("API anahtarı yok — panel açılacak, sağ üstteki Ayarlar düğmesinden ekleyin.")
     else:
         print(BANNER)
 

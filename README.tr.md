@@ -63,31 +63,31 @@ Kodlanmış komutlar yok. Ayrı STT/TTS hattı yok. Regex eşleme yok.
 <tr>
 <td width="50%">
 
-**🎤 Canlı Ses**
+**Canlı Ses**
 Yankı iptali ile tam çift yönlü ses. 16 kHz mikrofon, 24 kHz TTS, 20 ms parçacıklar, 350 ms VAD.
 
-**🧠 Gemini Native Audio**
+**Gemini Native Audio**
 `gemini-2.5-flash-native-audio` — tek model sohbet, araç çağrısı ve ses sentezini doğal olarak çalıştırır.
 
-**🖥️ Tam Mac Kontrolü**
+**Tam Mac Kontrolü**
 Shell komutları, AppleScript/JXA, Erişilebilirlik API'si (tıklama, sürükleme, kaydırma, yazma, ekran görüntüsü), uygulama otomasyonu.
 
-**🔍 Google Arama**
+**Google Arama**
 Canlı oturuma doğrudan bağlı yerleşik web arama aracı — tarayıcı gerekmez.
 
 </td>
 <td width="50%">
 
-**🎙️ Akıllı Oturum Yönetimi**
+**Akıllı Oturum Yönetimi**
 *Hey Kyros* ile uyan, *bekleyebilirsin* ile beklemede kal, *dur* ile durdur. Model karar verir.
 
-**🛡️ Dayanıklı Bağlantı**
+**Dayanıklı Bağlantı**
 Oturum yenileme, arabellek kurtarma, otomatik yeniden bağlanma. Ağ sorunlarından etkilenmez.
 
-**🌊 Dynamic Island UI**
+**Dynamic Island UI**
 Transkript, mikrofon seviyesi, ayarlar ve sağ tık menüsüne sahip yüzen 300×100 panel.
 
-**🔐 Tasarımda Güvenli**
+**Tasarımda Güvenli**
 API anahtarları `0600` izinleriyle saklanır, asla kaydedilmez. Yetkili komutlar yerel macOS kimlik doğrulama pencerelerini kullanır.
 
 </td>
@@ -281,7 +281,7 @@ Hey Kyros, İstanbul'da hava şu an nasıl?
 
 - **Sol tık** — Sohbet görünümünü açar (transkript, kaynak bağlantıları, metin girişi, kontroller)
 - **Sağ tık** — Bağlam menüsü (Uyan / Dur / Bekle / Mikrofon aç-kapat / Ayarlar / Çıkış)
-- **Ayarlar (⚙)** — API anahtarı, ses modeli seçimi, bağlantı testi
+- **Ayarlar düğmesi** — API anahtarı, ses modeli seçimi, bağlantı testi
 
 ### Ayarlar Paneli
 
@@ -401,7 +401,7 @@ Kurulum, uyanma/bekleme, söz kesme, sistem yetenekleri, iptal/bağlantı ve yö
 | Belirti | Çözüm |
 |---------|-------|
 | `Microphone failed to start` | Sistem Ayarları → Gizlilik → Mikrofon → Kyros/Terminal/Python'a erişim verin |
-| `Connecting`'de takıldı | API anahtarını kontrol edin (Ayarlar ⚙ → Test), ağı doğrulayın, `logs/kyros.log` dosyasına bakın |
+| `Connecting`'de takıldı | API anahtarını kontrol edin (Ayarlar → Test), ağı doğrulayın, `logs/kyros.log` dosyasına bakın |
 | `Received 1008 policy violation` | Model/API uyumsuzluğu — Ayarlar'dan doğru modeli seçin |
 | `User location is not supported` | Google bölgesel kısıtlaması — VPN veya farklı ağ deneyin |
 | Ses aygıtı değişiyor döngüsü | Bridge v5 debounce bunu halleder; en son `build_audio.sh`'den emin olun |
