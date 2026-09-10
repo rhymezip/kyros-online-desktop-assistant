@@ -121,8 +121,9 @@ PANEL_H = 100
 EXPANDED_W = 520
 EXPANDED_H = 650
 SETTINGS_TOP = 86
-ISLAND_TOP_INSET = 14
-ISLAND_BOTTOM_RADIUS = 20
+ISLAND_SHOULDER_WIDTH = 22
+ISLAND_SHOULDER_DEPTH = 18
+ISLAND_BOTTOM_RADIUS = 24
 ORB_COUNT = 3
 MIC_BARS = 32
 LERP = 0.045
@@ -1530,22 +1531,44 @@ class KyrosPanel(QMainWindow):
         p.restore()
 
     def _island_path(self, close_top=True):
-        """Top-attached island with concave shoulders and rounded lower corners."""
+        """Top-attached island with continuous, tangent-matched oval shoulders."""
         left = 0.0
         top = 0.0
         right = float(self.width())
         bottom = float(self.height())
-        inset = float(ISLAND_TOP_INSET)
+        shoulder = float(ISLAND_SHOULDER_WIDTH)
+        depth = float(ISLAND_SHOULDER_DEPTH)
         radius = float(ISLAND_BOTTOM_RADIUS)
+        # Cubic control points keep both ends tangent to the screen edge and
+        # panel wall. This avoids the small kink produced by a quadratic arc.
+        shoulder_control_x = shoulder * 0.58
+        shoulder_control_y = depth * 0.48
+        corner_control = radius * 0.55228475
 
         path = QPainterPath(QPointF(left, top))
-        path.quadTo(QPointF(left + inset, top), QPointF(left + inset, top + inset))
-        path.lineTo(QPointF(left + inset, bottom - radius))
-        path.quadTo(QPointF(left + inset, bottom), QPointF(left + inset + radius, bottom))
-        path.lineTo(QPointF(right - inset - radius, bottom))
-        path.quadTo(QPointF(right - inset, bottom), QPointF(right - inset, bottom - radius))
-        path.lineTo(QPointF(right - inset, top + inset))
-        path.quadTo(QPointF(right - inset, top), QPointF(right, top))
+        path.cubicTo(
+            QPointF(left + shoulder_control_x, top),
+            QPointF(left + shoulder, top + shoulder_control_y),
+            QPointF(left + shoulder, top + depth),
+        )
+        path.lineTo(QPointF(left + shoulder, bottom - radius))
+        path.cubicTo(
+            QPointF(left + shoulder, bottom - radius + corner_control),
+            QPointF(left + shoulder + radius - corner_control, bottom),
+            QPointF(left + shoulder + radius, bottom),
+        )
+        path.lineTo(QPointF(right - shoulder - radius, bottom))
+        path.cubicTo(
+            QPointF(right - shoulder - radius + corner_control, bottom),
+            QPointF(right - shoulder, bottom - radius + corner_control),
+            QPointF(right - shoulder, bottom - radius),
+        )
+        path.lineTo(QPointF(right - shoulder, top + depth))
+        path.cubicTo(
+            QPointF(right - shoulder, top + shoulder_control_y),
+            QPointF(right - shoulder_control_x, top),
+            QPointF(right, top),
+        )
         if close_top:
             path.closeSubpath()
         return path
