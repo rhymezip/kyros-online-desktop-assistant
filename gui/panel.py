@@ -1336,7 +1336,7 @@ class KyrosPanel(QMainWindow):
     def _add_text(self, who, text):
         # Chat penceresi kaldırıldı — sadece log
         if who == "Hata":
-            self.setToolTip(text)
+            logging.getLogger("kyros").debug("Panel error: %s", text)
 
     def _add_sources(self, sources):
         pass  # Chat penceresi kaldırıldı
@@ -1647,6 +1647,7 @@ class KyrosPanel(QMainWindow):
         elapsed = time.time() - self.t0
         self._draw_background(p)
         self._draw_lights(p, elapsed)
+        self._draw_top_seal(p)
         self._draw_mic_bars(p, elapsed)
         self._draw_label(p)
         p.end()
@@ -1661,10 +1662,18 @@ class KyrosPanel(QMainWindow):
         border_pen = QPen(QColor(90, 100, 150, 75), 1.0)
         p.setPen(border_pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawPath(path)
+        p.drawPath(self._island_path(close_top=False))
         p.restore()
 
-    def _island_path(self):
+    def _draw_top_seal(self, p):
+        """Keep the screen-edge seam solid black as colored lights move behind it."""
+        p.save()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(0, 0, 0))
+        p.drawRect(QRectF(0, 0, self.width(), 2))
+        p.restore()
+
+    def _island_path(self, close_top=True):
         """Top-attached island with concave shoulders and rounded lower corners."""
         left = 0.0
         top = 0.0
@@ -1681,7 +1690,8 @@ class KyrosPanel(QMainWindow):
         path.quadTo(QPointF(right - inset, bottom), QPointF(right - inset, bottom - radius))
         path.lineTo(QPointF(right - inset, top + inset))
         path.quadTo(QPointF(right - inset, top), QPointF(right, top))
-        path.closeSubpath()
+        if close_top:
+            path.closeSubpath()
         return path
 
     def _draw_lights(self, p, t):
