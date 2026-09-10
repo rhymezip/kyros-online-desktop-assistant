@@ -1041,39 +1041,51 @@ class ApiSettingsDialog(QDialog):
             QMessageBox.critical(self, "Hata", f"Kaydedilemedi: {e}")
 
 
-class StatusBarHandler:
-    """NSStatusBar tiklama olaylarini handley eden handler."""
-    def click_(self, sender):
-        try:
-            panel = self.panel
-            if panel._panel_visible:
-                panel._hide_panel()
-            else:
-                panel.slide_in()
-        except Exception:
-            pass
+def _make_statusbar_handler(panel):
+    """pyobjc NSObject subclass ile statusbar handler olustur."""
+    import objc
+    from AppKit import NSObject
 
-    def togglePanel_(self, sender):
-        try:
-            panel = self.panel
-            if panel._panel_visible:
-                panel._hide_panel()
-            else:
-                panel.slide_in()
-        except Exception:
-            pass
+    class StatusBarHandler(NSObject):
+        panel = objc.ivar('panel')
 
-    def openSettings_(self, sender):
-        try:
-            QTimer.singleShot(0, self.panel._open_api_settings)
-        except Exception:
-            pass
+        @objc.selector(signature=b"v@:@")
+        def click_(self, sender):
+            try:
+                if self.panel._panel_visible:
+                    self.panel._hide_panel()
+                else:
+                    self.panel.slide_in()
+            except Exception:
+                pass
 
-    def quitApp_(self, sender):
-        try:
-            QTimer.singleShot(0, QApplication.instance().quit)
-        except Exception:
-            pass
+        @objc.selector(signature=b"v@:@")
+        def togglePanel_(self, sender):
+            try:
+                if self.panel._panel_visible:
+                    self.panel._hide_panel()
+                else:
+                    self.panel.slide_in()
+            except Exception:
+                pass
+
+        @objc.selector(signature=b"v@:@")
+        def openSettings_(self, sender):
+            try:
+                QTimer.singleShot(0, self.panel._open_api_settings)
+            except Exception:
+                pass
+
+        @objc.selector(signature=b"v@:@")
+        def quitApp_(self, sender):
+            try:
+                QTimer.singleShot(0, QApplication.instance().quit)
+            except Exception:
+                pass
+
+    handler = StatusBarHandler.alloc().init()
+    handler.panel = panel
+    return handler
 
 
 class KyrosPanel(QMainWindow):
@@ -1167,8 +1179,7 @@ class KyrosPanel(QMainWindow):
             self._statusitem.button().setImage_(img)
             self._statusitem.button().setToolTip_("Kyros Asistani")
 
-            handler = StatusBarHandler.alloc().init()
-            handler.panel = self
+            handler = _make_statusbar_handler(self)
             self._statusbar_handler = handler
 
             self._statusitem.button().setTarget_(handler)
