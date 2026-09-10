@@ -8,8 +8,10 @@ satırları paylaşın; `config/local.json` ve API anahtarını paylaşmayın.
 1. Projeyi Mac'e taşıyın, `bash install.sh` çalıştırın. Derleme ve otomatik testler hatasız bitmeli.
 2. `venv/bin/python main.py --doctor` çalıştırın. İlk kullanım öncesi izinlerin eksik görünmesi mümkündür.
 3. `open Kyros.app` ile açın. Mikrofon iznini verin. Bağlanıyor, sonra Bekliyor görünmeli.
-4. Panel menüsüne ulaşabildiğinizi ve Çıkış'ın uygulamayı/ses motorunu kapattığını kontrol edin.
-5. Erişilebilirlik/Ekran Kaydı/Otomasyon izinlerini ilk ilgili istekte verin. Gerektiğinde yeniden açın.
+4. Panelin ekranın üst kenarına bitişik açıldığını kontrol edin. Çentikli Mac'te fiziksel çentikle
+   birleşmeli; çentiksiz ekranda üstten sarkan siyah ada gibi görünmeli, menü çubuğunun altına kaymamalı.
+5. Panel menüsüne ulaşabildiğinizi ve Çıkış'ın uygulamayı/ses motorunu kapattığını kontrol edin.
+6. Erişilebilirlik/Ekran Kaydı/Otomasyon izinlerini ilk ilgili istekte verin. Gerektiğinde yeniden açın.
 
 ## 2. Wake ve standby
 

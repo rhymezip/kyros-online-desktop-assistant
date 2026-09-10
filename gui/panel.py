@@ -40,6 +40,7 @@ from PyQt6.QtGui import (
     QFont,
     QFontMetrics,
 )
+from core.panel_geometry import top_attached_panel_positions
 
 
 MODES = {
@@ -119,6 +120,8 @@ MODES = {
 
 PANEL_W = 300
 PANEL_H = 100
+ISLAND_TOP_INSET = 14
+ISLAND_BOTTOM_RADIUS = 20
 ORB_COUNT = 3
 MIC_BARS = 32
 LERP = 0.045
@@ -135,6 +138,13 @@ class PanelSignals(QObject):
 
 def lerp(a, b, t):
     return a + (b - a) * t
+
+
+def panel_positions(screen, panel_width=PANEL_W, panel_height=PANEL_H):
+    hidden, visible = top_attached_panel_positions(
+        screen.x(), screen.y(), screen.width(), panel_width, panel_height
+    )
+    return QPoint(*hidden), QPoint(*visible)
 
 
 class AnimatedWidget(QObject):
@@ -1161,8 +1171,8 @@ class KyrosPanel(QMainWindow):
         self.setAutoFillBackground(False)
         self.setFixedSize(PANEL_W, PANEL_H)
         screen = QApplication.primaryScreen().geometry()
-        x = (screen.width() - PANEL_W) // 2
-        self.move(x, -PANEL_H)
+        hidden, _ = panel_positions(screen)
+        self.move(hidden)
 
     def _setup_statusbar_item(self):
         """Menubar'da status bar item olustur (Textream gibi)."""
@@ -1272,84 +1282,60 @@ class KyrosPanel(QMainWindow):
         self._slide_anim = QPropertyAnimation(self, b"pos")
         self._slide_anim.setDuration(300)
         screen = QApplication.primaryScreen().geometry()
-        x = (screen.width() - PANEL_W) // 2
-        notch_y = self._detect_notch_bottom()
-        self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
-        self._slide_anim.setEndValue(QPoint(x, notch_y))
+        hidden, visible = panel_positions(screen)
+        self._slide_anim.setStartValue(hidden)
+        self._slide_anim.setEndValue(visible)
+        self._slide_anim.finished.connect(self._fix_macos_window)
         self._slide_anim.start()
-        self._fix_macos_window()
 
     def _hide_panel(self):
         self._panel_visible = False
         screen = QApplication.primaryScreen().geometry()
-        x = (screen.width() - PANEL_W) // 2
+        hidden, _ = panel_positions(screen)
         self._hide_anim = QPropertyAnimation(self, b"pos")
         self._hide_anim.setDuration(250)
         self._hide_anim.setStartValue(self.pos())
-        self._hide_anim.setEndValue(QPoint(x, -PANEL_H))
+        self._hide_anim.setEndValue(hidden)
         self._hide_anim.start()
         self._hide_anim.finished.connect(self.hide)
-
-    def _has_dynamic_island(self):
-        """Dynamic Island (çentik) olup olmadığını tespit et.
-        NSScreen.safeAreaInsets.top > 0 veya auxiliaryTopLeftArea/RightArea mevcutsa
-        Dynamic Island vardır."""
-        try:
-            from AppKit import NSScreen
-            ns_screen = NSScreen.mainScreen()
-            if ns_screen is None:
-                return False, 0
-            safe_insets = ns_screen.safeAreaInsets()
-            if safe_insets.top > 0:
-                return True, int(safe_insets.top)
-            left_area = ns_screen.auxiliaryTopLeftArea()
-            right_area = ns_screen.auxiliaryTopRightArea()
-            if left_area is not None and right_area is not None:
-                notch_height = ns_screen.frame().size.height - ns_screen.visibleFrame().size.height
-                if notch_height > 0:
-                    return True, int(notch_height)
-        except Exception:
-            pass
-        return False, 0
-
-    def _detect_notch_bottom(self):
-        """Dynamic Island / menubar alt kenarını tespit et.
-        Dynamic Island varsa safeAreaInsets.top, yoksa visibleFrame.origin.y kullanır."""
-        try:
-            from AppKit import NSScreen
-            ns_screen = NSScreen.mainScreen()
-            if ns_screen is None:
-                screen = QApplication.primaryScreen().availableGeometry()
-                return screen.y()
-            safe_insets = ns_screen.safeAreaInsets()
-            if safe_insets.top > 0:
-                return int(safe_insets.top)
-            visible = ns_screen.visibleFrame()
-            return int(visible.origin.y)
-        except Exception:
-            pass
-        screen = QApplication.primaryScreen().availableGeometry()
-        return screen.y()
 
     def _fix_macos_window(self):
         try:
             import objc
             from AppKit import (
-                NSFloatingWindowLevel,
+                NSScreenSaverWindowLevel,
+                NSColor,
                 NSWindowCollectionBehaviorCanJoinAllSpaces,
+                NSWindowCollectionBehaviorFullScreenAuxiliary,
                 NSWindowCollectionBehaviorStationary,
                 NSWindowCollectionBehaviorIgnoresCycle,
             )
 
             ns_view = objc.objc_object(c_void_p=int(self.winId()))
             ns_window = ns_view.window()
-            ns_window.setLevel_(NSFloatingWindowLevel + 1)
+            ns_window.setLevel_(NSScreenSaverWindowLevel)
             ns_window.setCollectionBehavior_(
                 NSWindowCollectionBehaviorCanJoinAllSpaces
+                | NSWindowCollectionBehaviorFullScreenAuxiliary
                 | NSWindowCollectionBehaviorStationary
                 | NSWindowCollectionBehaviorIgnoresCycle
             )
+            ns_window.setOpaque_(False)
+            ns_window.setBackgroundColor_(NSColor.clearColor())
+            ns_window.setHasShadow_(False)
             ns_window.setHidesOnDeactivate_(False)
+
+            # AppKit uses bottom-left coordinates. Pinning the native window by
+            # its top-left point prevents macOS/Qt safe-area handling from
+            # placing it below the menu bar or hardware notch.
+            if self._panel_visible:
+                ns_screen = ns_window.screen()
+                if ns_screen is not None:
+                    frame = ns_screen.frame()
+                    ns_window.setFrameTopLeftPoint_(
+                        (frame.origin.x + (frame.size.width - PANEL_W) / 2,
+                         frame.origin.y + frame.size.height)
+                    )
         except Exception as e:
             logging.getLogger("kyros").warning("macOS window fix failed: %s", e)
 
@@ -1399,29 +1385,40 @@ class KyrosPanel(QMainWindow):
 
     def _draw_background(self, p):
         p.save()
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, PANEL_W, PANEL_H), 20, 20)
+        path = self._island_path()
         p.setClipPath(path)
         p.setPen(Qt.PenStyle.NoPen)
-        # Daha opak arka plan (240/255 ≈ %94)
-        p.setBrush(QColor(14, 14, 20, 240))
-        p.drawRoundedRect(QRectF(0, 0, PANEL_W, PANEL_H), 20, 20)
-        # Daha belirgin kenarlık
-        border_pen = QPen(QColor(100, 110, 180, 120), 1.5)
+        p.setBrush(QColor(0, 0, 0, 255))
+        p.drawPath(path)
+        border_pen = QPen(QColor(90, 100, 150, 75), 1.0)
         p.setPen(border_pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(QRectF(0, 0, PANEL_W, PANEL_H), 20, 20)
-        # Dış glow efekti
-        glow_pen = QPen(QColor(80, 90, 200, 40), 3)
-        p.setPen(glow_pen)
-        p.drawRoundedRect(QRectF(-1, -1, PANEL_W + 2, PANEL_H + 2), 21, 21)
+        p.drawPath(path)
         p.restore()
+
+    def _island_path(self):
+        """Top-attached island with concave shoulders and rounded lower corners."""
+        left = 0.0
+        top = 0.0
+        right = float(PANEL_W)
+        bottom = float(PANEL_H)
+        inset = float(ISLAND_TOP_INSET)
+        radius = float(ISLAND_BOTTOM_RADIUS)
+
+        path = QPainterPath(QPointF(left, top))
+        path.quadTo(QPointF(left + inset, top), QPointF(left + inset, top + inset))
+        path.lineTo(QPointF(left + inset, bottom - radius))
+        path.quadTo(QPointF(left + inset, bottom), QPointF(left + inset + radius, bottom))
+        path.lineTo(QPointF(right - inset - radius, bottom))
+        path.quadTo(QPointF(right - inset, bottom), QPointF(right - inset, bottom - radius))
+        path.lineTo(QPointF(right - inset, top + inset))
+        path.quadTo(QPointF(right - inset, top), QPointF(right, top))
+        path.closeSubpath()
+        return path
 
     def _draw_orbs(self, p, t):
         p.save()
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(1, 1, PANEL_W - 2, PANEL_H - 2), 19, 19)
-        p.setClipPath(path)
+        p.setClipPath(self._island_path())
         cx = PANEL_W / 2
         cy = PANEL_H / 2
         radii = [55, 40, 28]
@@ -1442,9 +1439,7 @@ class KyrosPanel(QMainWindow):
 
     def _draw_mic_bars(self, p, t):
         p.save()
-        path_clip = QPainterPath()
-        path_clip.addRoundedRect(QRectF(1, 1, PANEL_W - 2, PANEL_H - 2), 19, 19)
-        p.setClipPath(path_clip)
+        p.setClipPath(self._island_path())
 
         W = 244
         ox = (PANEL_W - W) / 2
