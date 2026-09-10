@@ -17,6 +17,51 @@ import config
 from core.gemini_live import GeminiLive
 
 
+# ─── Renkli Log Formatı ──────────────────────────────────────────────
+COLORS = {
+    "DEBUG": "\033[36m",
+    "INFO": "\033[32m",
+    "WARNING": "\033[33m",
+    "ERROR": "\033[31m",
+    "CRITICAL": "\033[35m",
+}
+RESET = "\033[0m"
+DIM = "\033[2m"
+BOLD = "\033[1m"
+
+
+class ColorFormatter(logging.Formatter):
+    """Terminal için renkli log formatı."""
+
+    def format(self, record):
+        levelname = record.levelname
+        color = COLORS.get(levelname, "")
+        module = record.module
+        msg = record.getMessage()
+        ts = self.formatTime(record, "%H:%M:%S")
+
+        if levelname == "ERROR":
+            icon = f"{color}{BOLD}✗"
+            prefix = f"{icon} {levelname}{RESET}"
+        elif levelname == "WARNING":
+            prefix = f"{color}⚠ {levelname}{RESET}"
+        elif levelname == "DEBUG":
+            prefix = f"{color}{DIM}▸ {levelname}{RESET}"
+        else:
+            prefix = f"{color}● {levelname}{RESET}"
+
+        return f"{DIM}{ts}{RESET} {prefix} {DIM}[{module}]{RESET} {msg}"
+
+
+BANNER = f"""
+{BOLD}{COLORS['INFO']}  ╭───────────────────────────────────────╮
+  │            ◉  KYROS  v3.0               │
+  │       Canlı Ses Asistanı — macOS         │
+  ╰───────────────────────────────────────╯{RESET}
+{DIM}  Python {sys.version.split()[0]} • Ctrl+C ile çıkış{RESET}
+"""
+
+
 class Kyros:
     def __init__(self, debug=False, text_only=False, audio_backend=None):
         self.gemini = GeminiLive(text_only=text_only, audio_backend=audio_backend)
@@ -42,14 +87,24 @@ class Kyros:
 def configure_logging(debug):
     folder = config.ROOT / "logs"
     folder.mkdir(exist_ok=True, mode=0o700)
-    handler = RotatingFileHandler(
+
+    # Dosya handler'ı (renksiz, detaylı)
+    file_handler = RotatingFileHandler(
         folder / "kyros.log", maxBytes=1_000_000, backupCount=3
     )
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    file_handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)-8s [%(module)s.%(funcName)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+
+    # Terminal handler'ı (renkli, düzenli)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(ColorFormatter())
+
     log = logging.getLogger("kyros")
     log.setLevel(logging.DEBUG if debug else logging.INFO)
-    log.addHandler(handler)
-    log.addHandler(logging.StreamHandler())
+    log.addHandler(file_handler)
+    log.addHandler(stream_handler)
 
 
 def main():
@@ -81,46 +136,52 @@ def main():
     args = parser.parse_args()
     if args.audio_check:
         from core.doctor import audio_check
-
         return audio_check()
     if args.doctor:
         from core.doctor import doctor
-
         return doctor()
     if sys.platform != "darwin":
-        print(
-            "Kyros uygulaması macOS içindir. Yerel testler: python3 -m unittest discover -s tests -v"
-        )
+        print("Kyros uygulaması macOS içindir.")
         return 1
     if not config.GEMINI_API_KEY and (args.text or args.no_panel):
-        print("Gemini API anahtarı eksik. Paneli açıp sağ üst ⚙ ile ekleyin veya bash install.sh çalıştırın.")
+        print("Gemini API anahtarı eksik. Paneli açıp sağ üst ⚙ ile ekleyin.")
         return 1
-    if not config.GEMINI_API_KEY:
-        print("API anahtarı yok — panel açılacak, sağ üst ⚙ ile ekleyin.")
+
     configure_logging(args.debug)
+    log = logging.getLogger("kyros")
+
+    if not config.GEMINI_API_KEY:
+        log.warning("API anahtarı yok — panel açılacak, sağ üst ⚙ ile ekleyin.")
+    else:
+        print(BANNER)
+
     kyros = Kyros(args.debug, args.text, args.audio_backend)
+
     if args.text or args.no_panel:
-        kyros.gemini.on_state_change = lambda mode: print(f"[KYROS] {mode}", flush=True)
-        kyros.gemini.on_text = lambda who, text: print(f"{who}: {text}", flush=True)
-        kyros.gemini.on_error = lambda error: print(f"[HATA] {error}", flush=True)
-        kyros.gemini.on_sources = lambda sources: print(
-            "Kaynaklar:", sources, flush=True
-        )
+        log.info("Metin modu başlatılıyor...")
+        kyros.gemini.on_state_change = lambda mode: log.info("Durum: %s", mode)
+        kyros.gemini.on_text = lambda who, text: print(f"  {who}: {text}")
+        kyros.gemini.on_error = lambda error: log.error(error)
+        kyros.gemini.on_sources = lambda sources: log.debug("Kaynaklar: %s", sources)
         signal.signal(signal.SIGTERM, lambda *_: kyros.stop())
         try:
             kyros.start()
             if args.text:
                 while kyros.gemini.is_running and not kyros.gemini.connected:
                     time.sleep(0.05)
-                print('"Hey Kyros" yaz. Çıkış: Ctrl+C veya Ctrl+D.')
+                print(f"\n{DIM}Komut bekleniyor... Çıkış: Ctrl+C{RESET}\n")
                 while kyros.gemini.is_running:
-                    value = input("> ")
-                    kyros.send_text(value)
+                    try:
+                        value = input(f"{COLORS['INFO']}› {RESET}")
+                        if value.strip():
+                            kyros.send_text(value)
+                    except EOFError:
+                        break
             else:
                 while kyros.gemini.is_running:
                     time.sleep(0.1)
-        except (KeyboardInterrupt, EOFError):
-            pass
+        except KeyboardInterrupt:
+            log.info("Kullanıcı çıkışı")
         finally:
             kyros.stop()
         return 0
@@ -130,11 +191,10 @@ def main():
         from PyQt6.QtWidgets import QApplication
         from gui.panel import KyrosPanel
     except ModuleNotFoundError as exc:
-        print(
-            f"Eksik bağımlılık: {exc.name}. Proje klasöründe bash install.sh çalıştırın."
-        )
+        log.error("Eksik bağımlılık: %s. bash install.sh çalıştırın.", exc.name)
         return 1
 
+    log.info("Panel modu başlatılıyor...")
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     panel = KyrosPanel(kyros)

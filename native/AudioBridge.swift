@@ -33,6 +33,82 @@ func deviceDescription(_ device: AudioDeviceID) -> String {
     return "\(value) (id=\(device))"
 }
 
+func deviceName(_ device: AudioDeviceID) -> String {
+    guard device != 0 else { return "Unknown" }
+    var address = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertyName,
+        mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    var name: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &name)
+    return status == noErr ? (name?.takeUnretainedValue() as String? ?? "Unknown") : "Unknown"
+}
+
+func hasChannels(_ device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
+        mScope: scope, mElement: kAudioObjectPropertyElementMain)
+    var dataSize: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(AudioObjectID(device), &address, 0, nil, &dataSize) == noErr else { return false }
+    let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
+    defer { bufferList.deallocate() }
+    guard AudioObjectGetPropertyData(AudioObjectID(device), &address, 0, nil, &dataSize, bufferList) == noErr else { return false }
+    let bufCount = Int(bufferList.pointee.mNumberBuffers)
+    var channelCount: UInt32 = 0
+    for i in 0..<bufCount {
+        channelCount += bufferList.pointee.mBuffers.mNumberChannels
+    }
+    return channelCount > 0
+}
+
+func printDevices() {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    var dataSize: UInt32 = 0
+    AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize)
+    let deviceCount = Int(dataSize) / MemoryLayout<AudioDeviceID>.size
+    var devices = [AudioDeviceID](repeating: 0, count: deviceCount)
+    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &devices)
+    
+    let defaultInput = defaultDevice(kAudioHardwarePropertyDefaultInputDevice)
+    let defaultOutput = defaultDevice(kAudioHardwarePropertyDefaultOutputDevice)
+    
+    var inputList: [[String: Any]] = []
+    var outputList: [[String: Any]] = []
+    
+    for device in devices {
+        guard device != 0 else { continue }
+        let name = deviceName(device)
+        let id = Int(device)
+        let hasInput = hasChannels(device, scope: kAudioDevicePropertyScopeInput)
+        let hasOutput = hasChannels(device, scope: kAudioDevicePropertyScopeOutput)
+        
+        if hasInput {
+            inputList.append([
+                "id": id,
+                "name": name,
+                "is_default": device == defaultInput
+            ])
+        }
+        if hasOutput {
+            outputList.append([
+                "id": id,
+                "name": name,
+                "is_default": device == defaultOutput
+            ])
+        }
+    }
+    
+    let result: [String: Any] = [
+        "input_devices": inputList,
+        "output_devices": outputList
+    ]
+    
+    if let jsonData = try? JSONSerialization.data(withJSONObject: result),
+       let jsonString = String(data: jsonData, encoding: .utf8) {
+        FileHandle.standardOutput.write(Data(jsonString.utf8))
+    }
+    exit(0)
+}
+
 func checkMicrophonePermission() {
     if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
         diagnostic("Waiting for microphone permission")
@@ -50,8 +126,18 @@ func checkMicrophonePermission() {
 }
 
 let checkOnly = CommandLine.arguments.contains("--check")
+let listDevices = CommandLine.arguments.contains("--list-devices")
 let noVPFlag = CommandLine.arguments.contains("--no-vp") || CommandLine.arguments.contains("--disable-voice-processing")
 let forceVPFlag = CommandLine.arguments.contains("--voice-processing")
+
+func getArgValue(_ flag: String) -> UInt32? {
+    guard let index = CommandLine.arguments.firstIndex(of: flag),
+          index + 1 < CommandLine.arguments.count,
+          let value = UInt32(CommandLine.arguments[index + 1]) else { return nil }
+    return value
+}
+let requestedInputDevice = getArgValue("--input-device")
+let requestedOutputDevice = getArgValue("--output-device")
 let wireQueue = DispatchQueue(label: "kyros.audio.wire")
 func packet(_ type: UInt8, _ data: Data) {
     if checkOnly { return }
@@ -141,14 +227,16 @@ final class Playback {
 }
 
 signal(SIGPIPE, SIG_IGN)
-diagnostic("Bridge v5; following system defaults; macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
-diagnostic("Input: \(deviceDescription(defaultDevice(kAudioHardwarePropertyDefaultInputDevice)))")
-diagnostic("Output: \(deviceDescription(defaultDevice(kAudioHardwarePropertyDefaultOutputDevice)))")
+if listDevices { printDevices() }
+diagnostic("Bridge v6; macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+checkMicrophonePermission()
+
+let activeInput = requestedInputDevice ?? defaultDevice(kAudioHardwarePropertyDefaultInputDevice)
+let activeOutput = requestedOutputDevice ?? defaultDevice(kAudioHardwarePropertyDefaultOutputDevice)
+diagnostic("Input: \(deviceDescription(activeInput))")
+diagnostic("Output: \(deviceDescription(activeOutput))")
 diagnostic("Microphone authorization: \(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)")
 if CommandLine.arguments.contains("--diagnose") { exit(0) }
-checkMicrophonePermission()
-let requestedInput = defaultDevice(kAudioHardwarePropertyDefaultInputDevice)
-let requestedOutput = defaultDevice(kAudioHardwarePropertyDefaultOutputDevice)
 let playback = Playback()
 
 // Helper to build and run engine. Returns never (exits or runs forever).
@@ -268,10 +356,8 @@ func runWithVoiceProcessing(_ useVP: Bool) throws {
         }
     }
 
-    diagnostic("Audio running with \(useVP ? "voice processing (AEC)" : "standard input (no AEC)") — using system default devices")
+    diagnostic("Audio running with \(useVP ? "voice processing (AEC)" : "standard input (no AEC)") — input=\(deviceDescription(activeInput)), output=\(deviceDescription(activeOutput))")
     // Route handling (same for both modes)
-    let activeInput = requestedInput
-    let activeOutput = requestedOutput
     var routeCheckPending = false
     func reopenDefaultRoute() {
         DispatchQueue.main.async {

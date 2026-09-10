@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import deque
+import json
 import logging
 import struct
 import sys
@@ -21,8 +22,27 @@ def _is_headphone_name(name):
     return any(m in lower for m in _HEADPHONE_MARKERS)
 
 
+def list_audio_devices():
+    """List available audio devices by calling native/kyros-audio --list-devices."""
+    binary = config.ROOT / "native/kyros-audio"
+    if not binary.exists():
+        return {"input_devices": [], "output_devices": []}
+    try:
+        import subprocess
+        result = subprocess.run(
+            [str(binary), "--list-devices"],
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout:
+            return json.loads(result.stdout.decode("utf-8", errors="replace"))
+    except Exception:
+        pass
+    return {"input_devices": [], "output_devices": []}
+
+
 class NativeAudio:
-    def __init__(self):
+    def __init__(self, input_device_id=None, output_device_id=None):
         self.process = None
         self.tasks = []
         self.monitor = None
@@ -38,6 +58,8 @@ class NativeAudio:
         self._closing = False
         self._restarts = deque()
         self._initialization_failures = 0
+        self._input_device_id = input_device_id
+        self._output_device_id = output_device_id
 
     async def start(self, on_pcm, on_playing):
         self.on_pcm, self.on_playing = on_pcm, on_playing
@@ -83,6 +105,10 @@ class NativeAudio:
             args.append("--no-vp")
         elif _os.environ.get("KYROS_VP") == "1":
             args.append("--voice-processing")
+        if self._input_device_id is not None:
+            args.extend(["--input-device", str(self._input_device_id)])
+        if self._output_device_id is not None:
+            args.extend(["--output-device", str(self._output_device_id)])
         self.process = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,

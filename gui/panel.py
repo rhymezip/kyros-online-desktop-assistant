@@ -1,5 +1,6 @@
 """Kyros Dynamic Island Panel - PyQt6"""
 
+import logging
 import math
 import time
 import threading
@@ -10,7 +11,6 @@ from PyQt6.QtWidgets import (
     QApplication,
     QMenu,
     QDialog,
-    QTextBrowser,
     QLineEdit,
     QPushButton,
     QHBoxLayout,
@@ -137,178 +137,544 @@ def lerp(a, b, t):
     return a + (b - a) * t
 
 
+class AnimatedWidget(QObject):
+    """Base for widgets with fade-in animation."""
+    def __init__(self, widget, delay=0):
+        super().__init__(widget)
+        self._widget = widget
+        self._opacity = 0.0
+        self._delay = delay
+        widget.setWindowOpacity(0.0)
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._fade_in)
+        self._timer.start(delay)
+
+    def _fade_in(self):
+        self._anim = QPropertyAnimation(self, b"opacity")
+        self._anim.setDuration(350)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.start()
+
+    @property
+    def opacity(self):
+        return self._opacity
+
+    @opacity.setter
+    def opacity(self, val):
+        self._opacity = val
+        self._widget.setWindowOpacity(val)
+
+
+class GlowEffect(QGraphicsDropShadowEffect):
+    """Animated glow effect for buttons on hover."""
+    def __init__(self, color="#5b6bff", radius=20, parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self.setColor(self._color)
+        self.setBlurRadius(radius)
+        self.setOffset(0, 0)
+        self._anim = QPropertyAnimation(self, b"blurRadius")
+        self._anim.setDuration(200)
+
+    def animate_in(self):
+        self._anim.stop()
+        self._anim.setStartValue(self.blurRadius())
+        self._anim.setEndValue(24)
+        self._anim.start()
+
+    def animate_out(self):
+        self._anim.stop()
+        self._anim.setStartValue(self.blurRadius())
+        self._anim.setEndValue(12)
+        self._anim.start()
+
+
+class PulseLabel(QLabel):
+    """Label with subtle pulse animation for status updates."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pulse_anim = None
+
+    def pulse(self, color="#5b6bff"):
+        if self._pulse_anim:
+            self._pulse_anim.stop()
+        self._pulse_anim = QPropertyAnimation(self, b"styleSheet")
+        self._pulse_anim.setDuration(600)
+        base = f"color: {color}; background: transparent;"
+        highlight = f"color: {color}; background: transparent; font-weight: 700;"
+        self._pulse_anim.setKeyValueAt(0.0, base)
+        self._pulse_anim.setKeyValueAt(0.5, highlight)
+        self._pulse_anim.setKeyValueAt(1.0, base)
+        self._pulse_anim.start()
+
+
+class SectionCard(QFrame):
+    """Glassmorphism card with fade-in animation."""
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+        self.setObjectName("sectionCard")
+        self.setStyleSheet("""
+            QFrame#sectionCard {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(30, 30, 45, 180),
+                    stop:1 rgba(20, 20, 30, 160));
+                border: 1px solid rgba(90, 100, 160, 60);
+                border-radius: 14px;
+                padding: 16px;
+            }
+            QFrame#sectionCard:hover {
+                border: 1px solid rgba(90, 100, 160, 120);
+            }
+        """)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(16, 14, 16, 14)
+        self._layout.setSpacing(10)
+
+        if title:
+            lbl = QLabel(title)
+            lbl.setStyleSheet("""
+                font-size: 10px; font-weight: 700; color: #7a82a8;
+                letter-spacing: 1.5px; padding: 0 0 4px 0;
+                border: none; background: transparent;
+            """)
+            self._layout.addWidget(lbl)
+
+        # Fade-in
+        self._opacity_val = 0.0
+        self._fade = QPropertyAnimation(self, b"windowOpacity")
+        self._fade.setDuration(400)
+
+    def fade_in(self, delay=0):
+        self._fade.stop()
+        if delay > 0:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(delay, self._start_fade)
+        else:
+            self._start_fade()
+
+    def _start_fade(self):
+        self._fade.setStartValue(0.0)
+        self._fade.setEndValue(1.0)
+        self._fade.start()
+
+    @property
+    def windowOpacity(self):
+        return self._opacity_val
+
+    @windowOpacity.setter
+    def windowOpacity(self, val):
+        self._opacity_val = val
+        self.setWindowOpacity(val)
+
+
+class ModernComboBox(QComboBox):
+    """ComboBox with animated hover and focus effects."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMinimumHeight(38)
+        self.setStyleSheet("""
+            QComboBox {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1e1e2a, stop:1 #181822);
+                color: #e8e8f0;
+                border: 1px solid #2a2a3a;
+                border-radius: 10px;
+                padding: 10px 14px;
+                font-size: 12px;
+                font-weight: 500;
+                selection-background-color: #3a3a5a;
+            }
+            QComboBox:hover {
+                border: 1px solid #4a5080;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #22223a, stop:1 #1c1c2c);
+            }
+            QComboBox:focus {
+                border: 1px solid #6b7bff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #242440, stop:1 #1e1e32);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 28px;
+                subcontrol-position: center right;
+            }
+            QComboBox::down-arrow {
+                width: 0; height: 0; border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #1a1a28;
+                color: #e8e8f0;
+                border: 1px solid #3a3a50;
+                border-radius: 8px;
+                selection-background-color: #2e2e4a;
+                padding: 6px;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 8px 12px;
+                border-radius: 6px;
+                min-height: 24px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2a2a4a, stop:1 #32325a);
+            }
+        """)
+
+
+class ModernLineEdit(QLineEdit):
+    """LineEdit with animated border glow on focus."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setStyleSheet("""
+            QLineEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1e1e2a, stop:1 #181822);
+                color: #e8e8f0;
+                border: 1px solid #2a2a3a;
+                border-radius: 10px;
+                padding: 11px 14px;
+                font-size: 12px;
+                font-weight: 500;
+                selection-background-color: #4a4a6a;
+            }
+            QLineEdit:hover {
+                border: 1px solid #4a5080;
+            }
+            QLineEdit:focus {
+                border: 1px solid #6b7bff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #242440, stop:1 #1e1e32);
+            }
+        """)
+
+
+class ModernButton(QPushButton):
+    """Button with animated glow and press effects."""
+    def __init__(self, text="", variant="primary", parent=None):
+        super().__init__(text, parent)
+        self._variant = variant
+        self._glow = GlowEffect(
+            color="#6b7bff" if variant == "primary" else "#5a6a8a",
+            radius=12,
+            parent=self,
+        )
+        self.setGraphicsEffect(self._glow)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update_style()
+
+    def _update_style(self):
+        if self._variant == "primary":
+            self.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #5b6bff, stop:1 #7b5bff);
+                    color: white;
+                    border: none;
+                    border-radius: 11px;
+                    padding: 11px 22px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    letter-spacing: 0.3px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #6b7bff, stop:1 #8b6bff);
+                }
+                QPushButton:pressed {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #4b5bef, stop:1 #6b4bef);
+                    padding-top: 12px; padding-bottom: 10px;
+                }
+                QPushButton:disabled {
+                    background: #2a2a3a;
+                    color: #5a5a6a;
+                }
+            """)
+        elif self._variant == "secondary":
+            self.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #1e1e2a, stop:1 #181822);
+                    color: #c0c0d0;
+                    border: 1px solid #2a2a3a;
+                    border-radius: 11px;
+                    padding: 10px 20px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+                QPushButton:hover {
+                    border: 1px solid #4a5080;
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #24243a, stop:1 #1e1e2e);
+                }
+                QPushButton:pressed {
+                    background: #1a1a28;
+                    padding-top: 11px; padding-bottom: 9px;
+                }
+            """)
+        else:  # ghost
+            self.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    color: #7a7a90;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+                QPushButton:hover {
+                    color: #b0b0d0;
+                    background: rgba(90, 100, 160, 40);
+                }
+            """)
+
+    def enterEvent(self, event):
+        self._glow.animate_in()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._glow.animate_out()
+        super().leaveEvent(event)
+
+
+class LoadingSpinner(QLabel):
+    """Animated loading spinner."""
+    def __init__(self, parent=None):
+        super().__init__("⟳", parent)
+        self.setStyleSheet("""
+            font-size: 16px; color: #6b7bff;
+            background: transparent; border: none;
+        """)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._rotate)
+        self.hide()
+
+    def start(self):
+        self._angle = 0
+        self.show()
+        self._timer.start(16)
+
+    def stop(self):
+        self._timer.stop()
+        self.hide()
+
+    def _rotate(self):
+        self._angle = (self._angle + 12) % 360
+        self.setStyleSheet(f"""
+            font-size: 16px; color: #6b7bff;
+            background: transparent; border: none;
+            transform: rotate({self._angle}deg);
+        """)
+
+
 class ApiSettingsDialog(QDialog):
-    """Modern API + Voice Model ayar dialogu — mevcut akışı bozmaz."""
+    """Modern 2026 API + Voice Model + Audio Devices settings dialog with animations."""
 
     _test_result = pyqtSignal(bool, str)
     _save_result = pyqtSignal(bool, str)
     _models_fetched = pyqtSignal(list, str)
+    _devices_fetched = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Kyros Ayarları")
-        self.setFixedSize(460, 400)
+        self.setMinimumSize(480, 400)
+        self.resize(480, 520)
         self.setModal(True)
-        # Frameless modern look ama native close kalsın
+        self._input_devices = []
+        self._output_devices = []
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.setStyleSheet(self._style())
         self._test_result.connect(self._on_test_result)
+        self._save_result.connect(self._on_save_result)
         self._models_fetched.connect(self._on_models_fetched)
+        self._devices_fetched.connect(self._on_devices_fetched)
         self._build_ui()
         self._load_current()
+        self._animate_open()
 
     def _style(self):
         return """
         QDialog {
-            background-color: #0f0f13;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 #0a0a10, stop:0.5 #0f0f18, stop:1 #0a0a12);
             color: #e8e8ec;
-            border-radius: 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(80, 90, 140, 50);
         }
         QLabel {
             color: #e8e8ec;
             background: transparent;
+            border: none;
         }
-        QLabel#title {
-            font-size: 17px;
-            font-weight: 700;
+        QLabel#dialogTitle {
+            font-size: 20px;
+            font-weight: 800;
             color: #ffffff;
+            letter-spacing: -0.3px;
         }
-        QLabel#subtitle {
+        QLabel#dialogSubtitle {
             font-size: 11px;
-            color: #9aa0b5;
+            color: #6a7294;
+            letter-spacing: 0.2px;
+        }
+        QLabel#sectionTitle {
+            font-size: 10px;
+            font-weight: 700;
+            color: #7a82a8;
+            letter-spacing: 1.5px;
         }
         QLabel#fieldLabel {
             font-size: 11px;
             font-weight: 600;
-            color: #aab0c3;
+            color: #8a90b0;
             letter-spacing: 0.3px;
-        }
-        QLineEdit, QComboBox {
-            background-color: #1a1a20;
-            color: #f0f0f5;
-            border: 1px solid #2a2a34;
-            border-radius: 10px;
-            padding: 10px 12px;
-            font-size: 12px;
-            selection-background-color: #3a3a4a;
-        }
-        QLineEdit:focus, QComboBox:focus {
-            border: 1px solid #5b6bff;
-            background-color: #1e1e28;
-        }
-        QComboBox::drop-down {
-            border: none;
-            width: 24px;
-        }
-        QComboBox::down-arrow {
-            width: 0;
-            height: 0;
-            border: none;
-        }
-        QComboBox QAbstractItemView {
-            background-color: #1a1a20;
-            color: #e8e8ec;
-            border: 1px solid #2a2a34;
-            selection-background-color: #2e2e42;
-            padding: 4px;
-        }
-        QPushButton {
-            border: none;
-            border-radius: 10px;
-            padding: 10px 18px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        QPushButton#primary {
-            background-color: #5b6bff;
-            color: white;
-        }
-        QPushButton#primary:hover {
-            background-color: #6a7aff;
-        }
-        QPushButton#primary:disabled {
-            background-color: #2a2a3a;
-            color: #6a6a7a;
-        }
-        QPushButton#secondary {
-            background-color: #1e1e28;
-            color: #c8c8d5;
-            border: 1px solid #2a2a34;
-        }
-        QPushButton#secondary:hover {
-            background-color: #252535;
-        }
-        QPushButton#ghost {
-            background: transparent;
-            color: #8a8aa0;
-            font-size: 18px;
-            padding: 4px 8px;
-        }
-        QPushButton#ghost:hover {
-            color: #e0e0ff;
-            background-color: #1e1e28;
         }
         QLabel#status {
             font-size: 11px;
-            padding: 6px 10px;
-            border-radius: 8px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        QFrame#divider {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 transparent, stop:0.5 rgba(80, 90, 160, 80), stop:1 transparent);
+            max-height: 1px;
+            border: none;
+        }
+        QFrame#sectionCard {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(25, 25, 40, 200), stop:1 rgba(18, 18, 28, 180));
+            border: 1px solid rgba(70, 80, 130, 50);
+            border-radius: 14px;
+        }
+        QFrame#sectionCard:hover {
+            border: 1px solid rgba(90, 100, 160, 90);
         }
         """
 
     def _build_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(24, 22, 24, 22)
-        root.setSpacing(13)
+        from PyQt6.QtWidgets import QScrollArea, QWidget
 
-        # Header
-        header = QHBoxLayout()
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # Header (sabit üst kısım)
+        header_widget = QWidget()
+        header_widget.setStyleSheet("background: transparent; border: none;")
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(28, 20, 28, 12)
+        header_layout.setSpacing(12)
+        icon_label = QLabel("⚡")
+        icon_label.setStyleSheet("font-size: 24px; background: transparent; border: none;")
+        header_layout.addWidget(icon_label)
         title_box = QVBoxLayout()
+        title_box.setSpacing(2)
         title = QLabel("Kyros Ayarları")
-        title.setObjectName("title")
-        subtitle = QLabel("API anahtarı ve voice-native model — değişiklik anında aktif olur")
-        subtitle.setObjectName("subtitle")
+        title.setObjectName("dialogTitle")
+        subtitle = QLabel("API, model ve ses aygıt yapılandırması")
+        subtitle.setObjectName("dialogSubtitle")
         subtitle.setWordWrap(True)
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-        header.addLayout(title_box, 1)
-        # close hint
-        header.addStretch()
-        root.addLayout(header)
+        header_layout.addLayout(title_box, 1)
+        root.addWidget(header_widget)
 
         # Divider
         line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background-color: #222230; max-height: 1px; border: none;")
+        line.setObjectName("divider")
         line.setFixedHeight(1)
         root.addWidget(line)
 
-        # API Key
-        api_label = QLabel("GEMINI API ANAHTARI")
-        api_label.setObjectName("fieldLabel")
-        root.addWidget(api_label)
+        # Scrollable content
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+            QScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: rgba(30, 30, 50, 100);
+                width: 8px;
+                border-radius: 4px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(100, 110, 180, 120);
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(100, 110, 180, 180);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+        """)
+
+        content_widget = QWidget()
+        content_widget.setStyleSheet("background: transparent; border: none;")
+        content = QVBoxLayout(content_widget)
+        content.setContentsMargins(28, 16, 28, 16)
+        content.setSpacing(12)
+
+        # API Key Section Card
+        api_card = QFrame()
+        api_card.setObjectName("sectionCard")
+        api_card_layout = QVBoxLayout(api_card)
+        api_card_layout.setContentsMargins(16, 14, 16, 14)
+        api_card_layout.setSpacing(8)
+
+        api_section_title = QLabel("API ANAHTARI")
+        api_section_title.setObjectName("sectionTitle")
+        api_card_layout.addWidget(api_section_title)
+
+        api_desc = QLabel("Gemini API erişimi için anahtarınızı girin")
+        api_desc.setStyleSheet("font-size: 10px; color: #5a6080; padding: 0 0 4px 0; border: none;")
+        api_card_layout.addWidget(api_desc)
+
         api_row = QHBoxLayout()
         api_row.setSpacing(8)
-        self.api_input = QLineEdit()
-        self.api_input.setPlaceholderText("Gemini API — boş bırakırsan mevcut korunur")
+        self.api_input = ModernLineEdit()
+        self.api_input.setPlaceholderText("AIza... veya AQ. ile başlar")
         self.api_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_input.setClearButtonEnabled(True)
         api_row.addWidget(self.api_input, 1)
-        self.toggle_btn = QPushButton("Göster")
-        self.toggle_btn.setObjectName("ghost")
-        self.toggle_btn.setFixedSize(68, 36)
-        self.toggle_btn.setMinimumWidth(68)
-        self.toggle_btn.setToolTip("Göster / gizle")
+        self.toggle_btn = ModernButton("Göster", "ghost")
+        self.toggle_btn.setFixedSize(72, 38)
         self.toggle_btn.clicked.connect(self._toggle_api)
         api_row.addWidget(self.toggle_btn)
-        root.addLayout(api_row)
+        api_card_layout.addLayout(api_row)
+        content.addWidget(api_card)
 
-        # Model — sadece doğrulanmış voice-native'ler, silinemez
-        model_label = QLabel("VOICE-NATIVE MODEL — sadece listedekiler çalışır")
-        model_label.setObjectName("fieldLabel")
-        root.addWidget(model_label)
-        self.model_combo = QComboBox()
-        self.model_combo.setEditable(False)
-        # Sadece gerçekten çalışan voice-native modeller (API'den doğrulanmış)
+        # Model Section Card
+        model_card = QFrame()
+        model_card.setObjectName("sectionCard")
+        model_card_layout = QVBoxLayout(model_card)
+        model_card_layout.setContentsMargins(16, 14, 16, 14)
+        model_card_layout.setSpacing(8)
+
+        model_section_title = QLabel("VOICE-NATIVE MODEL")
+        model_section_title.setObjectName("sectionTitle")
+        model_card_layout.addWidget(model_section_title)
+
+        model_desc = QLabel("Sadece listedeki modeller çalışır — API ile doğrulanmış")
+        model_desc.setStyleSheet("font-size: 10px; color: #5a6080; padding: 0 0 4px 0; border: none;")
+        model_card_layout.addWidget(model_desc)
+
+        self.model_combo = ModernComboBox()
         try:
             import config
             models = getattr(config, "VOICE_NATIVE_MODELS", [])
@@ -321,40 +687,104 @@ class ApiSettingsDialog(QDialog):
             ]
         for m in models:
             self.model_combo.addItem(m)
-        root.addWidget(self.model_combo)
+        model_card_layout.addWidget(self.model_combo)
+        content.addWidget(model_card)
 
-        # Status
+        # Audio Devices Section Card
+        audio_card = QFrame()
+        audio_card.setObjectName("sectionCard")
+        audio_card_layout = QVBoxLayout(audio_card)
+        audio_card_layout.setContentsMargins(16, 14, 16, 14)
+        audio_card_layout.setSpacing(8)
+
+        audio_header = QHBoxLayout()
+        audio_section_title = QLabel("SES AYGITLARI")
+        audio_section_title.setObjectName("sectionTitle")
+        audio_header.addWidget(audio_section_title)
+        audio_header.addStretch()
+        self.spinner = LoadingSpinner()
+        audio_header.addWidget(self.spinner)
+        self.refresh_devices_btn = ModernButton("↻ Yenile", "ghost")
+        self.refresh_devices_btn.setFixedSize(80, 30)
+        self.refresh_devices_btn.setToolTip("Mevcut ses aygıtlarını yeniden listele")
+        self.refresh_devices_btn.clicked.connect(self._refresh_devices_async)
+        audio_header.addWidget(self.refresh_devices_btn)
+        audio_card_layout.addLayout(audio_header)
+
+        audio_desc = QLabel("Varsayılan olarak sistem aygıtları kullanılır")
+        audio_desc.setStyleSheet("font-size: 10px; color: #5a6080; padding: 0 0 4px 0; border: none;")
+        audio_card_layout.addWidget(audio_desc)
+
+        # Input Device
+        input_label = QLabel("GİRİŞ (Mikrofon)")
+        input_label.setObjectName("fieldLabel")
+        audio_card_layout.addWidget(input_label)
+        self.input_combo = ModernComboBox()
+        audio_card_layout.addWidget(self.input_combo)
+
+        # Output Device
+        output_label = QLabel("ÇIKIŞ (Hoparlör)")
+        output_label.setObjectName("fieldLabel")
+        audio_card_layout.addWidget(output_label)
+        self.output_combo = ModernComboBox()
+        audio_card_layout.addWidget(self.output_combo)
+        content.addWidget(audio_card)
+
+        content.addStretch()
+        scroll.setWidget(content_widget)
+        root.addWidget(scroll, 1)
+
+        # Status (sabit alt kısım)
+        bottom_widget = QWidget()
+        bottom_widget.setStyleSheet("background: transparent; border: none;")
+        bottom_layout = QVBoxLayout(bottom_widget)
+        bottom_layout.setContentsMargins(28, 0, 28, 16)
+        bottom_layout.setSpacing(10)
+
         self.status_label = QLabel("")
         self.status_label.setObjectName("status")
         self.status_label.setWordWrap(True)
         self.status_label.hide()
-        root.addWidget(self.status_label)
+        bottom_layout.addWidget(self.status_label)
 
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
-        self.test_btn = QPushButton("Test Et")
-        self.test_btn.setObjectName("secondary")
+        self.test_btn = ModernButton("Test Et", "secondary")
         self.test_btn.setToolTip("API + model gerçekten çalışıyor mu kontrol et")
         self.test_btn.clicked.connect(self._on_test)
+        self.test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_row.addWidget(self.test_btn)
-
         btn_row.addStretch()
-        cancel = QPushButton("İptal")
-        cancel.setObjectName("secondary")
-        cancel.clicked.connect(self.reject)
-        btn_row.addWidget(cancel)
-        self.save_btn = QPushButton("Kaydet ve Uygula")
-        self.save_btn.setObjectName("primary")
+        self.save_btn = ModernButton("Kaydet ve Uygula", "primary")
         self.save_btn.clicked.connect(self._on_save)
         btn_row.addWidget(self.save_btn)
-        root.addLayout(btn_row)
+        bottom_layout.addLayout(btn_row)
 
         # Hint
-        hint = QLabel("Değişiklik local.json'a yazılır, bağlantı otomatik yenilenir. Geçersiz API uyarı verir ama engellemez.")
-        hint.setStyleSheet("color: #6a6a80; font-size: 10px; background: transparent;")
-        hint.setWordWrap(True)
-        root.addWidget(hint)
+        hint = QLabel("Değişiklikler anında aktif olur • Geçersiz API uyarı verir")
+        hint.setStyleSheet("color: #4a5070; font-size: 10px; background: transparent; border: none; letter-spacing: 0.2px;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bottom_layout.addWidget(hint)
+
+        root.addWidget(bottom_widget)
+
+        # Store cards for animation
+        self._cards = [api_card, model_card, audio_card]
+
+    def _animate_open(self):
+        """Staggered fade-in animation for all cards."""
+        from PyQt6.QtCore import QSequentialAnimationGroup, QEasingCurve
+        self._fade_group = QSequentialAnimationGroup(self)
+        for card in self._cards:
+            card.setWindowOpacity(0.0)
+            anim = QPropertyAnimation(card, b"windowOpacity")
+            anim.setDuration(350)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._fade_group.addAnimation(anim)
+        self._fade_group.start()
 
     def _load_current(self):
         try:
@@ -374,6 +804,8 @@ class ApiSettingsDialog(QDialog):
             # API varsa dinamik voice-native listesini sessizce yenile (doğru isimler)
             if cur_key:
                 self._refresh_models_async(cur_key, cur_model)
+            # Ses aygıtlarını arka planda listele
+            self._refresh_devices_async()
         except Exception:
             pass
 
@@ -400,6 +832,59 @@ class ApiSettingsDialog(QDialog):
                 pass
         threading.Thread(target=run, daemon=True).start()
 
+    def _refresh_devices_async(self):
+        self.refresh_devices_btn.setEnabled(False)
+        self.spinner.start()
+        def run():
+            try:
+                from core.audio_io import list_audio_devices
+                devices = list_audio_devices()
+                self._devices_fetched.emit(devices)
+            except Exception:
+                self._devices_fetched.emit({"input_devices": [], "output_devices": []})
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_devices_fetched(self, devices):
+        self.refresh_devices_btn.setEnabled(True)
+        self.spinner.stop()
+        self._input_devices = devices.get("input_devices", [])
+        self._output_devices = devices.get("output_devices", [])
+        self._populate_device_combos()
+
+    def _populate_device_combos(self):
+        try:
+            import config
+            cur_input = str(getattr(config, "AUDIO_INPUT_DEVICE", "") or "")
+            cur_output = str(getattr(config, "AUDIO_OUTPUT_DEVICE", "") or "")
+        except Exception:
+            cur_input, cur_output = "", ""
+
+        self.input_combo.clear()
+        self.input_combo.addItem("Varsayılan (Sistem)", "")
+        for dev in self._input_devices:
+            name = dev.get("name", "Unknown")
+            dev_id = str(dev.get("id", ""))
+            is_default = dev.get("is_default", False)
+            display = f"● {name}" if is_default else f"  {name}"
+            self.input_combo.addItem(display, dev_id)
+        if cur_input:
+            idx = self.input_combo.findData(cur_input)
+            if idx >= 0:
+                self.input_combo.setCurrentIndex(idx)
+
+        self.output_combo.clear()
+        self.output_combo.addItem("Varsayılan (Sistem)", "")
+        for dev in self._output_devices:
+            name = dev.get("name", "Unknown")
+            dev_id = str(dev.get("id", ""))
+            is_default = dev.get("is_default", False)
+            display = f"● {name}" if is_default else f"  {name}"
+            self.output_combo.addItem(display, dev_id)
+        if cur_output:
+            idx = self.output_combo.findData(cur_output)
+            if idx >= 0:
+                self.output_combo.setCurrentIndex(idx)
+
     def _toggle_api(self):
         if self.api_input.echoMode() == QLineEdit.EchoMode.Password:
             self.api_input.setEchoMode(QLineEdit.EchoMode.Normal)
@@ -411,18 +896,32 @@ class ApiSettingsDialog(QDialog):
     def _set_status(self, text, kind="info"):
         # kind: info, success, error
         colors = {
-            "info": "background-color: #1a1a20; color: #aab0c3; border: 1px solid #2a2a34;",
-            "success": "background-color: #0f2a1a; color: #7ee0a0; border: 1px solid #1a4a2a;",
-            "error": "background-color: #2a0f13; color: #ff8a8a; border: 1px solid #4a1a20;",
+            "info": "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(30, 35, 60, 200), stop:1 rgba(25, 30, 50, 180)); color: #8090c0; border: 1px solid rgba(80, 100, 180, 60);",
+            "success": "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(15, 50, 30, 220), stop:1 rgba(10, 40, 25, 200)); color: #7ee0a0; border: 1px solid rgba(80, 200, 120, 60);",
+            "error": "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(60, 15, 20, 220), stop:1 rgba(50, 10, 15, 200)); color: #ff8a8a; border: 1px solid rgba(200, 80, 80, 60);",
         }
         self.status_label.setText(text)
-        self.status_label.setStyleSheet(f"QLabel#status {{ {colors.get(kind, colors['info'])} }}")
+        self.status_label.setStyleSheet(f"QLabel#status {{ {colors.get(kind, colors['info'])} border-radius: 10px; padding: 8px 12px; font-size: 11px; }}")
+        # Animate in
+        self.status_label.setWindowOpacity(0.0)
         self.status_label.show()
+        self._status_anim = QPropertyAnimation(self.status_label, b"windowOpacity")
+        self._status_anim.setDuration(300)
+        self._status_anim.setStartValue(0.0)
+        self._status_anim.setEndValue(1.0)
+        self._status_anim.start()
 
     def _on_test_result(self, ok, msg):
         self.test_btn.setEnabled(True)
         self.test_btn.setText("Test Et")
         self._set_status(msg, "success" if ok else "error")
+
+    def _on_save_result(self, ok, msg):
+        self._handle_save_after_validate(
+            self.api_input.text().strip(),
+            self.model_combo.currentText().strip(),
+            ok, msg
+        )
 
     def _on_test(self):
         api_input = self.api_input.text().strip()
@@ -522,7 +1021,14 @@ class ApiSettingsDialog(QDialog):
         try:
             import config
             # api None ise mevcut korunur, model her zaman kaydedilir
-            config.save_config(api_key=api if api else None, model=model)
+            input_device = self.input_combo.currentData() or ""
+            output_device = self.output_combo.currentData() or ""
+            config.save_config(
+                api_key=api if api else None,
+                model=model,
+                input_device=input_device,
+                output_device=output_device,
+            )
             # parent panel'e haber ver — canlı bağlantıyı yenile
             parent = self.parent()
             # KyrosPanel ise
@@ -555,39 +1061,6 @@ class KyrosPanel(QMainWindow):
         )
         self.signals.sources.connect(self._add_sources)
         self._mic_muted = False
-        self._history = QDialog(self)
-        self._history.setWindowTitle("Kyros · Konuşma ve kontroller")
-        self._history.resize(580, 450)
-        # The panel is intentionally allowed to sit at the top edge; the history
-        # window must still be placed fully inside the current usable screen.
-        screen = QApplication.primaryScreen().availableGeometry()
-        self._history.move(screen.center() - self._history.rect().center())
-        layout = QVBoxLayout(self._history)
-        self._transcript = QTextBrowser()
-        self._transcript.setOpenExternalLinks(True)
-        self._transcript.document().setMaximumBlockCount(500)
-        layout.addWidget(self._transcript)
-        entry_row = QHBoxLayout()
-        self._entry = QLineEdit()
-        self._entry.setPlaceholderText("Kyros'a yaz…")
-        self._entry.returnPressed.connect(self._send_entry)
-        entry_row.addWidget(self._entry)
-        send = QPushButton("Gönder")
-        send.clicked.connect(self._send_entry)
-        entry_row.addWidget(send)
-        layout.addLayout(entry_row)
-        controls = QHBoxLayout()
-        for label, action in (
-            ("Uyandır", "wake"),
-            ("Durdur", "stop"),
-            ("Beklemeye al", "standby"),
-        ):
-            button = QPushButton(label)
-            button.clicked.connect(
-                lambda checked=False, action=action: self.kyros.control(action)
-            )
-            controls.addWidget(button)
-        layout.addLayout(controls)
 
         self._cur_orb = [
             list(MODES["bekliyor"][f"orb{i + 1}"]) for i in range(ORB_COUNT)
@@ -620,27 +1093,12 @@ class KyrosPanel(QMainWindow):
         gemini.on_sources = self.signals.sources.emit
 
     def _add_text(self, who, text):
-        import html
-
-        self._transcript.append(f"<b>{html.escape(who)}:</b> {html.escape(text)}")
+        # Chat penceresi kaldırıldı — sadece log
         if who == "Hata":
             self.setToolTip(text)
 
     def _add_sources(self, sources):
-        import html
-
-        for source in sources:
-            url = source.get("uri", "")
-            if url.startswith(("https://", "http://")):
-                self._transcript.append(
-                    f'<a href="{html.escape(url, quote=True)}">{html.escape(source.get("title", url))}</a>'
-                )
-
-    def _send_entry(self):
-        text = self._entry.text().strip()
-        if text and self.kyros:
-            self.kyros.send_text(text)
-            self._entry.clear()
+        pass  # Chat penceresi kaldırıldı
 
     def _setup_window(self):
         self.setWindowFlags(
@@ -656,8 +1114,9 @@ class KyrosPanel(QMainWindow):
         self.setAutoFillBackground(False)
         self.setFixedSize(PANEL_W, PANEL_H)
         screen = QApplication.primaryScreen().geometry()
+        notch_y = self._detect_notch_bottom()
         x = (screen.width() - PANEL_W) // 2
-        self.move(x, -PANEL_H)
+        self.move(x, -PANEL_H)  # Başlangıçta yukarıda saklı
 
     def _setup_gear(self):
         # Sağ üst çark — panel boyası üstünde duran gerçek buton
@@ -734,11 +1193,11 @@ class KyrosPanel(QMainWindow):
                         time.sleep(0.6)
                         g.start()
                     except Exception as e:
-                        print(f"[PANEL] restart failed: {e}")
+                        logging.getLogger("kyros").error("Panel restart failed: %s", e)
                 threading.Thread(target=restart, daemon=True).start()
                 self._add_text("Sistem", f"Model: {new_model}" + (" · API güncellendi" if new_api else ""))
         except Exception as e:
-            print(f"[PANEL] _apply_api_change failed: {e}")
+            logging.getLogger("kyros").error("_apply_api_change failed: %s", e)
 
     def _init_timer(self):
         self.timer = QTimer()
@@ -750,10 +1209,26 @@ class KyrosPanel(QMainWindow):
         self._slide_anim = QPropertyAnimation(self, b"pos")
         self._slide_anim.setDuration(300)
         screen = QApplication.primaryScreen().geometry()
+        # Dynamic Island / notch altında konumlan
+        notch_y = self._detect_notch_bottom()
         x = (screen.width() - PANEL_W) // 2
         self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
-        self._slide_anim.setEndValue(QPoint(x, 0))
+        self._slide_anim.setEndValue(QPoint(x, notch_y))
         self._slide_anim.start()
+
+    def _detect_notch_bottom(self):
+        """Dynamic Island / çentik alt kenarını tespit et."""
+        try:
+            from AppKit import NSScreen
+            ns_screen = NSScreen.mainScreen()
+            visible = ns_screen.visibleFrame()
+            # visibleFrame.origin.y = menü çubuğu altı (notch altı)
+            return int(visible.origin.y)
+        except Exception:
+            pass
+        # Fallback: available geometry'yi kullan
+        screen = QApplication.primaryScreen().availableGeometry()
+        return screen.y()
 
     def _fix_macos_window(self):
         try:
@@ -775,7 +1250,7 @@ class KyrosPanel(QMainWindow):
             )
             ns_window.setHidesOnDeactivate_(False)
         except Exception as e:
-            print(f"[PANEL] macOS fix failed: {e}")
+            logging.getLogger("kyros").warning("macOS window fix failed: %s", e)
 
     def focusOutEvent(self, e):
         pass
@@ -827,12 +1302,18 @@ class KyrosPanel(QMainWindow):
         path.addRoundedRect(QRectF(0, 0, PANEL_W, PANEL_H), 20, 20)
         p.setClipPath(path)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(12, 12, 16, 210))
+        # Daha opak arka plan (240/255 ≈ %94)
+        p.setBrush(QColor(14, 14, 20, 240))
         p.drawRoundedRect(QRectF(0, 0, PANEL_W, PANEL_H), 20, 20)
-        border_pen = QPen(QColor(255, 255, 255, 35), 1)
+        # Daha belirgin kenarlık
+        border_pen = QPen(QColor(100, 110, 180, 120), 1.5)
         p.setPen(border_pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(0, 0, PANEL_W, PANEL_H), 20, 20)
+        # Dış glow efekti
+        glow_pen = QPen(QColor(80, 90, 200, 40), 3)
+        p.setPen(glow_pen)
+        p.drawRoundedRect(QRectF(-1, -1, PANEL_W + 2, PANEL_H + 2), 21, 21)
         p.restore()
 
     def _draw_orbs(self, p, t):
@@ -849,9 +1330,10 @@ class KyrosPanel(QMainWindow):
             r = radii[i]
             c = self._cur_orb[i]
             grad = QRadialGradient(QPointF(ox, oy), r)
-            grad.setColorAt(0, QColor(int(c[0]), int(c[1]), int(c[2]), 70))
-            grad.setColorAt(0.5, QColor(int(c[0]), int(c[1]), int(c[2]), 30))
-            grad.setColorAt(1.0, QColor(int(c[0]), int(c[1]), int(c[2]), 0))
+            # Daha canlı orb'lar (alpha 120/90/50)
+            grad.setColorAt(0, QColor(int(c[0]), int(c[1]), int(c[2]), 120))
+            grad.setColorAt(0.5, QColor(int(c[0]), int(c[1]), int(c[2]), 90))
+            grad.setColorAt(1.0, QColor(int(c[0]), int(c[1]), int(c[2]), 50))
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QBrush(grad))
             p.drawEllipse(QPointF(ox, oy), r, r)
@@ -879,9 +1361,9 @@ class KyrosPanel(QMainWindow):
             x = ox + i * gap
             y = oy + (bar_h - h) / 2
 
-            brightness = 0.2 + (h / bar_h) * 0.55
+            brightness = 0.3 + (h / bar_h) * 0.65
             alpha = int(brightness * 255)
-            alpha = min(alpha, 191)
+            alpha = min(alpha, 230)
 
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(255, 255, 255, alpha))
@@ -905,7 +1387,7 @@ class KyrosPanel(QMainWindow):
         p.setBrush(QColor(int(c[0]), int(c[1]), int(c[2]), 200))
         p.drawEllipse(QPointF(lx - 6, ly + th / 2 - 1), 2.5, 2.5)
 
-        p.setPen(QColor(255, 255, 255, 115))
+        p.setPen(QColor(255, 255, 255, 180))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawText(QPointF(lx, ly + th - 2), label)
         p.restore()
@@ -915,7 +1397,7 @@ class KyrosPanel(QMainWindow):
         if hasattr(self, "_gear_btn") and self._gear_btn.geometry().contains(event.pos()):
             return
         if event.button() == Qt.MouseButton.LeftButton:
-            self._open_settings()
+            pass  # Sol tık - sadece görsel, pencere açma
         elif event.button() == Qt.MouseButton.RightButton:
             menu = QMenu(self)
             for label, action in (
@@ -933,18 +1415,12 @@ class KyrosPanel(QMainWindow):
             )
             mute.triggered.connect(self._toggle_mic)
             menu.addAction("Ayarlar ⚙", self._open_api_settings)
-            menu.addAction("Konuşma ve kontroller", self._open_settings)
             menu.addAction("Çıkış", QApplication.instance().quit)
             menu.exec(event.globalPosition().toPoint())
 
     def _toggle_mic(self):
         self._mic_muted = not self._mic_muted
         self.kyros.set_mic_muted(self._mic_muted)
-
-    def _open_settings(self):
-        self._history.show()
-        self._history.raise_()
-        self._history.activateWindow()
 
     def closeEvent(self, event):
         if self.kyros and hasattr(self.kyros, "stop"):

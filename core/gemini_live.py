@@ -147,9 +147,12 @@ class GeminiLive:
             if not self.text_only:
                 from core.audio_io import NativeAudio, PortAudio
 
-                self.audio = (
-                    NativeAudio() if self.audio_backend == "native" else PortAudio()
-                )
+                if self.audio_backend == "native":
+                    input_id = int(config.AUDIO_INPUT_DEVICE) if config.AUDIO_INPUT_DEVICE else None
+                    output_id = int(config.AUDIO_OUTPUT_DEVICE) if config.AUDIO_OUTPUT_DEVICE else None
+                    self.audio = NativeAudio(input_device_id=input_id, output_device_id=output_id)
+                else:
+                    self.audio = PortAudio()
                 self.audio.on_route_change = self._on_audio_route
                 if hasattr(self.audio, "on_headphone"):
                     self.audio.on_headphone = self._on_headphone

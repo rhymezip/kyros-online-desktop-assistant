@@ -51,9 +51,9 @@ def fetch_voice_models(api_key, timeout=8):
         return list(VOICE_NATIVE_MODELS)
 
 
-def save_config(api_key=None, model=None):
+def save_config(api_key=None, model=None, input_device=None, output_device=None):
     """local.json'a yazar ve bellekteki GEMINI_*'ı günceller. None ise değiştirmez."""
-    global GEMINI_API_KEY, GEMINI_MODEL, _local
+    global GEMINI_API_KEY, GEMINI_MODEL, AUDIO_INPUT_DEVICE, AUDIO_OUTPUT_DEVICE, _local
     data = {}
     if LOCAL.exists():
         try:
@@ -73,6 +73,20 @@ def save_config(api_key=None, model=None):
         if model:
             data["GEMINI_MODEL"] = model
             GEMINI_MODEL = model
+    if input_device is not None:
+        if input_device:
+            data["AUDIO_INPUT_DEVICE"] = input_device
+            AUDIO_INPUT_DEVICE = input_device
+        else:
+            data.pop("AUDIO_INPUT_DEVICE", None)
+            AUDIO_INPUT_DEVICE = ""
+    if output_device is not None:
+        if output_device:
+            data["AUDIO_OUTPUT_DEVICE"] = output_device
+            AUDIO_OUTPUT_DEVICE = output_device
+        else:
+            data.pop("AUDIO_OUTPUT_DEVICE", None)
+            AUDIO_OUTPUT_DEVICE = ""
     LOCAL.parent.mkdir(parents=True, exist_ok=True)
     LOCAL.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     try:
@@ -87,10 +101,14 @@ def save_config(api_key=None, model=None):
         if "config" in _sys.modules:
             _sys.modules["config"].GEMINI_API_KEY = GEMINI_API_KEY
             _sys.modules["config"].GEMINI_MODEL = GEMINI_MODEL
+            _sys.modules["config"].AUDIO_INPUT_DEVICE = AUDIO_INPUT_DEVICE
+            _sys.modules["config"].AUDIO_OUTPUT_DEVICE = AUDIO_OUTPUT_DEVICE
             _sys.modules["config"]._local = _local
         if "config.settings" in _sys.modules:
             _sys.modules["config.settings"].GEMINI_API_KEY = GEMINI_API_KEY
             _sys.modules["config.settings"].GEMINI_MODEL = GEMINI_MODEL
+            _sys.modules["config.settings"].AUDIO_INPUT_DEVICE = AUDIO_INPUT_DEVICE
+            _sys.modules["config.settings"].AUDIO_OUTPUT_DEVICE = AUDIO_OUTPUT_DEVICE
     except Exception:
         pass
     return True
@@ -152,6 +170,8 @@ def validate_api_key(api_key, model=None, timeout=8):
 
 
 AUDIO_BACKEND = os.environ.get("KYROS_AUDIO_BACKEND", "native")
+AUDIO_INPUT_DEVICE = os.environ.get("KYROS_INPUT_DEVICE", _local.get("AUDIO_INPUT_DEVICE", ""))
+AUDIO_OUTPUT_DEVICE = os.environ.get("KYROS_OUTPUT_DEVICE", _local.get("AUDIO_OUTPUT_DEVICE", ""))
 SILENCE_DURATION_MS = 350
 TOOL_TIMEOUT = 10
 MAX_TOOL_TIMEOUT = 30
