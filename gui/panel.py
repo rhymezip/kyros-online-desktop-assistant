@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QApplication,
     QMenu,
-    QDialog,
     QLineEdit,
     QPushButton,
     QHBoxLayout,
@@ -21,10 +20,14 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QWidget,
     QListView,
+    QStyledItemDelegate,
+    QStyle,
+    QStyleFactory,
 )
 from PyQt6.QtCore import (
     Qt,
     QTimer,
+    QSize,
     QRect,
     QRectF,
     QPointF,
@@ -123,6 +126,9 @@ MODES = {
 
 PANEL_W = 300
 PANEL_H = 100
+EXPANDED_W = 520
+EXPANDED_H = 650
+SETTINGS_TOP = 86
 ISLAND_TOP_INSET = 14
 ISLAND_BOTTOM_RADIUS = 20
 ORB_COUNT = 3
@@ -290,6 +296,32 @@ class SectionCard(QFrame):
         self.setWindowOpacity(val)
 
 
+class ComboItemDelegate(QStyledItemDelegate):
+    """Consistent rounded popup rows across native macOS appearance modes."""
+
+    def sizeHint(self, option, index):
+        return QSize(max(220, option.rect.width()), 38)
+
+    def paint(self, p, option, index):
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        row = QRectF(option.rect.adjusted(4, 2, -4, -2))
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        if selected or hovered:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(39, 39, 47) if selected else QColor(25, 25, 30))
+            p.drawRoundedRect(row, 7, 7)
+        p.setPen(QColor(248, 248, 250) if selected else QColor(214, 214, 220))
+        text_rect = option.rect.adjusted(16, 0, -12, 0)
+        p.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            str(index.data() or ""),
+        )
+        p.restore()
+
+
 class ModernComboBox(QComboBox):
     """ComboBox with animated hover and focus effects."""
     def __init__(self, *args, **kwargs):
@@ -299,6 +331,13 @@ class ModernComboBox(QComboBox):
         popup.setObjectName("comboPopup")
         popup.setSpacing(2)
         popup.setUniformItemSizes(True)
+        popup.setFrameShape(QFrame.Shape.NoFrame)
+        popup.setContentsMargins(5, 5, 5, 5)
+        popup.setItemDelegate(ComboItemDelegate(popup))
+        fusion = QStyleFactory.create("Fusion")
+        if fusion is not None:
+            self.setStyle(fusion)
+            popup.setStyle(fusion)
         self.setView(popup)
         self.setMaxVisibleItems(7)
         self.setStyleSheet("""
@@ -331,8 +370,7 @@ class ModernComboBox(QComboBox):
             QComboBox QAbstractItemView {
                 background-color: #070708;
                 color: #f2f2f5;
-                border: 1px solid #28282d;
-                border-radius: 10px;
+                border: none;
                 selection-background-color: #202027;
                 padding: 7px;
                 outline: none;
@@ -359,6 +397,16 @@ class ModernComboBox(QComboBox):
         p.drawLine(QPointF(x - 3.5, y - 1.5), QPointF(x, y + 2))
         p.drawLine(QPointF(x, y + 2), QPointF(x + 3.5, y - 1.5))
         p.end()
+
+    def showPopup(self):
+        super().showPopup()
+        popup_window = self.view().window()
+        popup_window.setObjectName("comboPopupWindow")
+        popup_window.setStyleSheet(
+            "QFrame#comboPopupWindow { background: #070708; "
+            "border: 1px solid #2b2b31; border-radius: 11px; }"
+        )
+        popup_window.resize(max(self.width(), popup_window.width()), popup_window.height())
 
 
 class ModernLineEdit(QLineEdit):
@@ -518,10 +566,23 @@ class GlyphButton(QPushButton):
                     QPointF(cx + math.cos(angle) * 8.2, cy + math.sin(angle) * 8.2),
                 )
         elif self.glyph == "refresh":
-            arc = QRectF(cx - 7, cy - 7, 14, 14)
-            p.drawArc(arc, 35 * 16, 285 * 16)
-            p.drawLine(QPointF(cx + 5.7, cy - 5.1), QPointF(cx + 7.4, cy - 0.7))
-            p.drawLine(QPointF(cx + 5.7, cy - 5.1), QPointF(cx + 1.3, cy - 4.5))
+            top_arrow = QPainterPath(QPointF(cx - 7, cy - 2))
+            top_arrow.cubicTo(
+                QPointF(cx - 4, cy - 7), QPointF(cx + 3, cy - 7),
+                QPointF(cx + 6, cy - 3)
+            )
+            p.drawPath(top_arrow)
+            p.drawLine(QPointF(cx + 6, cy - 3), QPointF(cx + 2, cy - 3.5))
+            p.drawLine(QPointF(cx + 6, cy - 3), QPointF(cx + 5.5, cy - 7))
+
+            bottom_arrow = QPainterPath(QPointF(cx + 7, cy + 2))
+            bottom_arrow.cubicTo(
+                QPointF(cx + 4, cy + 7), QPointF(cx - 3, cy + 7),
+                QPointF(cx - 6, cy + 3)
+            )
+            p.drawPath(bottom_arrow)
+            p.drawLine(QPointF(cx - 6, cy + 3), QPointF(cx - 2, cy + 3.5))
+            p.drawLine(QPointF(cx - 6, cy + 3), QPointF(cx - 5.5, cy + 7))
         elif self.glyph == "back":
             p.drawLine(QPointF(cx + 5, cy - 6), QPointF(cx - 1, cy))
             p.drawLine(QPointF(cx - 1, cy), QPointF(cx + 5, cy + 6))
@@ -587,27 +648,20 @@ class LoadingSpinner(QWidget):
         p.end()
 
 
-class ApiSettingsDialog(QDialog):
-    """Modern 2026 API + Voice Model + Audio Devices settings dialog with animations."""
+class SettingsPane(QWidget):
+    """Settings content embedded directly inside the expanding island window."""
 
     _test_result = pyqtSignal(bool, str)
     _save_result = pyqtSignal(bool, str)
     _models_fetched = pyqtSignal(list, str)
     _devices_fetched = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, on_close=None):
         super().__init__(parent)
-        self.setWindowTitle("Kyros Ayarları")
-        self.setMinimumSize(0, 0)
-        self.setModal(True)
-        self._closing = False
+        self.setObjectName("settingsPane")
+        self._on_close = on_close
         self._input_devices = []
         self._output_devices = []
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.Tool
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
         self.setStyleSheet(self._style())
         self._test_result.connect(self._on_test_result)
         self._save_result.connect(self._on_save_result)
@@ -615,15 +669,13 @@ class ApiSettingsDialog(QDialog):
         self._devices_fetched.connect(self._on_devices_fetched)
         self._build_ui()
         self._load_current()
-        QTimer.singleShot(0, self._animate_window_open)
 
     def _style(self):
         return """
-        QDialog {
-            background: #000000;
+        QWidget#settingsPane {
+            background: transparent;
             color: #eeeef2;
-            border-radius: 18px;
-            border: 1px solid #202024;
+            border: none;
         }
         QLabel {
             color: #e8e8ec;
@@ -889,64 +941,17 @@ class ApiSettingsDialog(QDialog):
         # Store cards for animation
         self._cards = [api_card, model_card, audio_card]
 
-    def _target_geometry(self):
-        parent = self.parentWidget()
-        if parent is not None:
-            parent_frame = parent.frameGeometry()
-            center_x = parent_frame.center().x()
-            top = parent_frame.top() + PANEL_H - 10
-        else:
-            screen = QApplication.primaryScreen().geometry()
-            center_x = screen.center().x()
-            top = screen.top() + PANEL_H - 10
-        return QRect(center_x - 260, top, 520, 640)
-
-    def _animate_window_open(self):
-        from PyQt6.QtCore import QEasingCurve
-
-        target = self._target_geometry()
-        start = QRect(target.center().x() - 150, target.top(), 300, 8)
-        self.setGeometry(start)
-        self._window_anim = QPropertyAnimation(self, b"geometry", self)
-        self._window_anim.setDuration(380)
-        self._window_anim.setStartValue(start)
-        self._window_anim.setEndValue(target)
-        self._window_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._window_anim.finished.connect(self._finish_window_open)
-        self._window_anim.start()
-
-    def _finish_window_open(self):
-        self.setMinimumSize(500, 480)
+    def show_content(self):
+        self.show()
         self._animate_open()
 
-    def _collapse_and_finish(self, accepted):
-        if self._closing:
-            return
-        self._closing = True
-        from PyQt6.QtCore import QEasingCurve
-
-        current = self.geometry()
-        end = QRect(current.center().x() - 150, current.top(), 300, 8)
-        self.setMinimumSize(0, 0)
-        self._window_anim = QPropertyAnimation(self, b"geometry", self)
-        self._window_anim.setDuration(260)
-        self._window_anim.setStartValue(current)
-        self._window_anim.setEndValue(end)
-        self._window_anim.setEasingCurve(QEasingCurve.Type.InCubic)
-        self._collapse_result = (
-            QDialog.DialogCode.Accepted if accepted else QDialog.DialogCode.Rejected
-        )
-        self._window_anim.finished.connect(self._finish_collapse)
-        self._window_anim.start()
-
-    def _finish_collapse(self):
-        QDialog.done(self, self._collapse_result)
-
     def accept(self):
-        self._collapse_and_finish(True)
+        if self._on_close:
+            self._on_close()
 
     def reject(self):
-        self._collapse_and_finish(False)
+        if self._on_close:
+            self._on_close()
 
     def _animate_open(self):
         """Staggered fade-in animation for all cards."""
@@ -1287,6 +1292,8 @@ class KyrosPanel(QMainWindow):
         self.signals.sources.connect(self._add_sources)
         self._mic_muted = False
         self._panel_visible = False
+        self._settings_open = False
+        self._settings_pane = None
 
         self._cur_orb = [
             list(MODES["bekliyor"][f"orb{i + 1}"]) for i in range(ORB_COUNT)
@@ -1338,7 +1345,7 @@ class KyrosPanel(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
-        self.setFixedSize(PANEL_W, PANEL_H)
+        self.resize(PANEL_W, PANEL_H)
         screen = QApplication.primaryScreen().geometry()
         hidden, _ = panel_positions(screen)
         self.move(hidden)
@@ -1415,8 +1422,72 @@ class KyrosPanel(QMainWindow):
             pass
 
     def _open_api_settings(self):
-        dlg = ApiSettingsDialog(self)
-        dlg.exec()
+        if self._settings_open:
+            return
+        if not self._panel_visible:
+            self.slide_in()
+            QTimer.singleShot(320, self._open_api_settings)
+            return
+
+        from PyQt6.QtCore import QEasingCurve
+
+        self._settings_open = True
+        self._gear_btn.hide()
+        self._settings_pane = SettingsPane(self, on_close=self._close_settings)
+        self._layout_settings_pane()
+        self._settings_pane.hide()
+
+        screen = QApplication.primaryScreen().geometry()
+        target_x = screen.x() + (screen.width() - EXPANDED_W) // 2
+        target = QRect(target_x, screen.y(), EXPANDED_W, EXPANDED_H)
+        self._settings_anim = QPropertyAnimation(self, b"geometry", self)
+        self._settings_anim.setDuration(420)
+        self._settings_anim.setStartValue(self.geometry())
+        self._settings_anim.setEndValue(target)
+        self._settings_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._settings_anim.finished.connect(self._finish_settings_open)
+        self._settings_anim.start()
+
+    def _finish_settings_open(self):
+        self._fix_macos_window()
+        if self._settings_pane is not None:
+            self._layout_settings_pane()
+            self._settings_pane.show_content()
+
+    def _close_settings(self):
+        if not self._settings_open:
+            return
+        from PyQt6.QtCore import QEasingCurve
+
+        self._settings_open = False
+        if self._settings_pane is not None:
+            self._settings_pane.hide()
+
+        screen = QApplication.primaryScreen().geometry()
+        target_x = screen.x() + (screen.width() - PANEL_W) // 2
+        target = QRect(target_x, screen.y(), PANEL_W, PANEL_H)
+        self._settings_anim = QPropertyAnimation(self, b"geometry", self)
+        self._settings_anim.setDuration(300)
+        self._settings_anim.setStartValue(self.geometry())
+        self._settings_anim.setEndValue(target)
+        self._settings_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._settings_anim.finished.connect(self._finish_settings_close)
+        self._settings_anim.start()
+
+    def _finish_settings_close(self):
+        if self._settings_pane is not None:
+            self._settings_pane.deleteLater()
+            self._settings_pane = None
+        self._gear_btn.show()
+        self._gear_btn.raise_()
+        self._fix_macos_window()
+
+    def _layout_settings_pane(self):
+        if self._settings_pane is not None:
+            self._settings_pane.setGeometry(
+                1, SETTINGS_TOP, max(1, self.width() - 2),
+                max(1, self.height() - SETTINGS_TOP - 1)
+            )
 
     def _apply_api_change(self, new_api, new_model):
         """Dialog'dan çağrılır — dosyaya zaten yazıldı, canlı bağlantıyı yenile."""
@@ -1466,6 +1537,10 @@ class KyrosPanel(QMainWindow):
         self._slide_anim.start()
 
     def _hide_panel(self):
+        if self._settings_open:
+            self._close_settings()
+            QTimer.singleShot(320, self._hide_panel)
+            return
         self._panel_visible = False
         screen = QApplication.primaryScreen().geometry()
         hidden, _ = panel_positions(screen)
@@ -1510,7 +1585,7 @@ class KyrosPanel(QMainWindow):
                 if ns_screen is not None:
                     frame = ns_screen.frame()
                     ns_window.setFrameTopLeftPoint_(
-                        (frame.origin.x + (frame.size.width - PANEL_W) / 2,
+                        (frame.origin.x + (frame.size.width - self.width()) / 2,
                          frame.origin.y + frame.size.height)
                     )
         except Exception as e:
@@ -1521,6 +1596,14 @@ class KyrosPanel(QMainWindow):
 
     def changeEvent(self, e):
         self.show()
+
+    def resizeEvent(self, event):
+        if hasattr(self, "_gear_btn"):
+            content_left = (self.width() - PANEL_W) // 2
+            self._gear_btn.move(content_left + PANEL_W - 42, 19)
+            self._gear_btn.raise_()
+        self._layout_settings_pane()
+        super().resizeEvent(event)
 
     def set_mode(self, mode: str):
         if mode not in MODES:
@@ -1577,8 +1660,8 @@ class KyrosPanel(QMainWindow):
         """Top-attached island with concave shoulders and rounded lower corners."""
         left = 0.0
         top = 0.0
-        right = float(PANEL_W)
-        bottom = float(PANEL_H)
+        right = float(self.width())
+        bottom = float(self.height())
         inset = float(ISLAND_TOP_INSET)
         radius = float(ISLAND_BOTTOM_RADIUS)
 
@@ -1599,7 +1682,8 @@ class KyrosPanel(QMainWindow):
         p.setClipPath(self._island_path())
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
 
-        anchors = (72, 150, 228)
+        content_left = (self.width() - PANEL_W) / 2
+        anchors = tuple(content_left + value for value in (72, 150, 228))
         for i in range(ORB_COUNT):
             c = self._cur_orb[i]
             phase = t * (0.31 + i * 0.035) + i * 2.1
@@ -1623,7 +1707,7 @@ class KyrosPanel(QMainWindow):
         p.setClipPath(self._island_path())
 
         W = 244
-        ox = (PANEL_W - W) / 2
+        ox = (self.width() - W) / 2
         oy = 64
         bar_h = 18
         gap = W / MIC_BARS
@@ -1656,7 +1740,7 @@ class KyrosPanel(QMainWindow):
         tw = fm.horizontalAdvance(label)
         th = fm.height()
 
-        lx = (PANEL_W - tw - 14) / 2
+        lx = (self.width() - tw - 14) / 2
         ly = PANEL_H - 16
 
         c = self._cur_dot
