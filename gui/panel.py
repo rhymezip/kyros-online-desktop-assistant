@@ -1061,6 +1061,7 @@ class KyrosPanel(QMainWindow):
         )
         self.signals.sources.connect(self._add_sources)
         self._mic_muted = False
+        self._panel_visible = False
 
         self._cur_orb = [
             list(MODES["bekliyor"][f"orb{i + 1}"]) for i in range(ORB_COUNT)
@@ -1076,12 +1077,11 @@ class KyrosPanel(QMainWindow):
         self._tgt_dot = list(MODES["bekliyor"]["dot"])
 
         self._setup_window()
-        self._setup_gear()
         self._init_timer()
+        self._setup_statusbar_item()
         self.setToolTip(
             "Tıkla: konuşma ve kontroller · Sağ tık: durdur / bekleme / mikrofon · ⚙: API / model"
         )
-        # İlk kurulum: API yoksa otomatik ayar ekranı (git'ten klonlayınca)
         QTimer.singleShot(900, self._check_api_on_startup)
 
     def bind(self, gemini):
@@ -1117,54 +1117,88 @@ class KyrosPanel(QMainWindow):
         x = (screen.width() - PANEL_W) // 2
         self.move(x, -PANEL_H)
 
-    def _setup_gear(self):
-        # Sağ üst çark — panel boyası üstünde duran gerçek buton
-        self._gear_btn = QPushButton("⚙", self)
-        self._gear_btn.setFixedSize(24, 24)
-        self._gear_btn.move(PANEL_W - 28, 6)
-        self._gear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._gear_btn.setToolTip("Ayarlar — API anahtarı ve voice-native model")
-        self._gear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(255,255,255,18);
-                color: #c8c8d5;
-                border: 1px solid rgba(255,255,255,22);
-                border-radius: 12px;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: rgba(91,107,255,180);
-                color: white;
-                border: 1px solid rgba(91,107,255,220);
-            }
-            QPushButton:pressed {
-                background-color: rgba(91,107,255,220);
-            }
-        """)
-        # gölge
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(12)
-        shadow.setColor(QColor(0, 0, 0, 80))
-        shadow.setOffset(0, 2)
-        self._gear_btn.setGraphicsEffect(shadow)
-        self._gear_btn.clicked.connect(self._open_api_settings)
-        self._gear_btn.show()
-        self._gear_btn.raise_()
+    def _setup_statusbar_item(self):
+        """Menubar'da status bar item olustur (Textream gibi)."""
+        try:
+            import objc
+            from AppKit import NSStatusBar, NSImage, NSMenu, NSMenuItem, NSObject
+
+            self._statusbar = NSStatusBar.systemStatusBar()
+            self._statusitem = self._statusbar.statusItemWithLength_(-2)
+
+            img = NSImage.imageNamed_("NSComputer")
+            img.setSize_((18, 18))
+            img.setTemplate_(True)
+            self._statusitem.button().setImage_(img)
+            self._statusitem.button().setToolTip_("Kyros Asistani")
+
+            self._statusitem.button().setTarget_(self)
+            self._statusitem.button().setAction_(objc.selector(self._on_statusbar_click, signature=b"v@:@"))
+
+            menu = NSMenu.alloc().init()
+
+            toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "Paneli Goster/Gizle", "togglePanel:", ""
+            )
+            toggle_item.setTarget_(self)
+            toggle_item.setAction_(objc.selector(self._toggle_panel, signature=b"v@:@"))
+            menu.addItem_(toggle_item)
+
+            menu.addItem_(NSMenuItem.separatorItem())
+
+            settings_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "Ayarlar", "openSettings:", ""
+            )
+            settings_item.setTarget_(self)
+            settings_item.setAction_(objc.selector(self._open_settings_from_menu, signature=b"v@:@"))
+            menu.addItem_(settings_item)
+
+            menu.addItem_(NSMenuItem.separatorItem())
+
+            quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                "Cikis", "quitApp:", ""
+            )
+            quit_item.setTarget_(self)
+            quit_item.setAction_(objc.selector(self._quit_app, signature=b"v@:@"))
+            menu.addItem_(quit_item)
+
+            self._statusitem.setMenu_(menu)
+
+        except Exception as e:
+            logging.getLogger("kyros").warning("Status bar item olusturulamadi: %s", e)
+
+    def _on_statusbar_click_(self, sender):
+        pass
+
+    def _toggle_panel_(self, sender):
+        if self._panel_visible:
+            self._hide_panel()
+        else:
+            self.slide_in()
+
+    def _open_settings_from_menu_(self, sender):
+        QTimer.singleShot(0, self._open_api_settings)
+
+    def _quit_app_(self, sender):
+        QTimer.singleShot(0, QApplication.instance().quit)
+
+    def _on_statusbar_click(self, sender):
+        if self._panel_visible:
+            self._hide_panel()
+        else:
+            self.slide_in()
 
     def _check_api_on_startup(self):
         try:
             import config
 
             if not getattr(config, "GEMINI_API_KEY", ""):
-                # modern uyarı + ayar aç
-                self._add_text("Sistem", "API anahtarı yok — sağ üst ⚙ ile Gemini API ekleyin.")
+                self._add_text("Sistem", "API anahtarı yok — menubar ⚙ ile Gemini API ekleyin.")
                 QTimer.singleShot(400, self._open_api_settings)
         except Exception:
             pass
 
     def _open_api_settings(self):
-        # Panel tıkını yutma — history yerine ayar aç
         dlg = ApiSettingsDialog(self)
         dlg.exec()
 
@@ -1205,6 +1239,7 @@ class KyrosPanel(QMainWindow):
 
     def slide_in(self):
         self.show()
+        self._panel_visible = True
         self._slide_anim = QPropertyAnimation(self, b"pos")
         self._slide_anim.setDuration(300)
         screen = QApplication.primaryScreen().geometry()
@@ -1213,6 +1248,18 @@ class KyrosPanel(QMainWindow):
         self._slide_anim.setStartValue(QPoint(x, -PANEL_H))
         self._slide_anim.setEndValue(QPoint(x, notch_y))
         self._slide_anim.start()
+        self._fix_macos_window()
+
+    def _hide_panel(self):
+        self._panel_visible = False
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - PANEL_W) // 2
+        self._hide_anim = QPropertyAnimation(self, b"pos")
+        self._hide_anim.setDuration(250)
+        self._hide_anim.setStartValue(self.pos())
+        self._hide_anim.setEndValue(QPoint(x, -PANEL_H))
+        self._hide_anim.start()
+        self._hide_anim.finished.connect(self.hide)
 
     def _has_dynamic_island(self):
         """Dynamic Island (çentik) olup olmadığını tespit et.
