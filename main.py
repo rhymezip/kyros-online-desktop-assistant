@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kyros macOS live assistant."""
+"""Kyros cross-platform live desktop assistant."""
 
 import argparse
 import logging
@@ -82,11 +82,18 @@ def banner(use_color=True):
     bold = BOLD if use_color else ""
     dim = DIM if use_color else ""
     reset = RESET if use_color else ""
+    platform_label = (
+        "macOS"
+        if sys.platform == "darwin"
+        else "Linux • Hyprland/Wayland"
+        if sys.platform == "linux"
+        else sys.platform
+    )
     return (
         f"\n{bold}{green}  ╭─ KYROS 3.0 ─────────────────────────╮\n"
         "  │ Canlı masaüstü asistanı              │\n"
         f"  ╰──────────────────────────────────────╯{reset}\n"
-        f"{dim}  macOS • Python {sys.version.split()[0]} • Çıkış: Ctrl+C{reset}\n"
+        f"{dim}  {platform_label} • Python {sys.version.split()[0]} • Çıkış: Ctrl+C{reset}\n"
     )
 
 
@@ -145,7 +152,11 @@ def configure_logging(debug):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Kyros — canlı ses ve genel Mac erişimi"
+        description=(
+            "Kyros — canlı ses ve genel Mac erişimi"
+            if sys.platform == "darwin"
+            else "Kyros — canlı ses ve genel masaüstü erişimi"
+        )
     )
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--no-panel", action="store_true")
@@ -157,7 +168,13 @@ def main():
         help="Mikrofonsuz yazılı API denemesi",
     )
     parser.add_argument(
-        "--audio-backend", choices=["native", "portaudio"], default=config.AUDIO_BACKEND
+        "--audio-backend",
+        choices=(
+            ["native", "portaudio"]
+            if sys.platform == "darwin"
+            else ["native", "pipewire", "portaudio"]
+        ),
+        default=config.AUDIO_BACKEND,
     )
     parser.add_argument(
         "--audio-check",
@@ -172,12 +189,12 @@ def main():
     args = parser.parse_args()
     if args.audio_check:
         from core.doctor import audio_check
-        return audio_check()
+        return audio_check(args.audio_backend)
     if args.doctor:
         from core.doctor import doctor
         return doctor()
-    if sys.platform != "darwin":
-        print("Kyros uygulaması macOS içindir.")
+    if sys.platform not in ("darwin", "linux"):
+        print("Kyros uygulaması macOS ve Linux içindir.")
         return 1
     if not config.GEMINI_API_KEY and (args.text or args.no_panel):
         print("Gemini API anahtarı eksik. Paneli açıp sağ üstteki Ayarlar düğmesinden ekleyin.")
@@ -235,7 +252,17 @@ def main():
     panel = KyrosPanel(kyros)
     kyros.panel = panel
     panel.bind(kyros.gemini)
-    app.aboutToQuit.connect(kyros.stop)
+    shutdown_started = False
+
+    def shutdown():
+        nonlocal shutdown_started
+        if shutdown_started:
+            return
+        shutdown_started = True
+        panel.close_for_shutdown()
+        kyros.stop()
+
+    app.aboutToQuit.connect(shutdown)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     signal.signal(signal.SIGTERM, lambda *_: app.quit())
     timer = QTimer()

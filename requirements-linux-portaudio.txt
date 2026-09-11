@@ -1,0 +1,3 @@
+-r requirements-linux.txt
+sounddevice>=0.5,<0.6
+numpy>=1.24,<3

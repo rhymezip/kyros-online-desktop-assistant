@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import AsyncMock, patch
 from core.executor import run_process, ToolExecutor, applescript_string
 from core.web_page import PageParser, fetch
 
@@ -94,3 +95,35 @@ class ExecutorTests(unittest.IsolatedAsyncioTestCase):
     def test_web_rejects_non_http_protocol(self):
         with self.assertRaises(ValueError):
             fetch("file:///etc/passwd")
+
+    async def test_linux_media_control_uses_playerctl_without_shell(self):
+        fake_result = {
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "Playing\n",
+            "stderr": "",
+            "truncated": False,
+        }
+        with patch("core.executor.sys.platform", "linux"), patch(
+            "core.executor.shutil.which", return_value="/usr/bin/playerctl"
+        ), patch("core.executor.run_process", new=AsyncMock(return_value=fake_result)) as run:
+            result = await ToolExecutor().execute(
+                "media_control", {"action": "play", "player": "spotify"}
+            )
+        self.assertTrue(result["ok"])
+        self.assertEqual(run.await_args.args[0], ["/usr/bin/playerctl", "--player=spotify", "play"])
+
+    def test_launch_app_rejects_missing_target_instead_of_guessing(self):
+        with patch("core.executor.sys.platform", "linux"):
+            with self.assertRaises(ValueError):
+                ToolExecutor()._launch_argv({})
+
+    def test_linux_launch_app_accepts_real_executable_name(self):
+        with patch("core.executor.sys.platform", "linux"), patch(
+            "core.executor.shutil.which",
+            side_effect=lambda name: "/usr/bin/spotify" if name == "spotify" else None,
+        ):
+            self.assertEqual(
+                ToolExecutor()._launch_argv({"app": "spotify"}),
+                ["/usr/bin/spotify"],
+            )

@@ -1,0 +1,4 @@
+# Kyros needs a virtual input device for explicit Wayland mouse/keyboard actions.
+# This grants access only to /dev/uinput through the dedicated kyros-input group;
+# it does not grant access to physical input devices.
+KERNEL=="uinput", GROUP="kyros-input", MODE="0660", OPTIONS+="static_node=uinput"

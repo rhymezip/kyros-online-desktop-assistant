@@ -1,21 +1,33 @@
+# Kyros local secrets and machine-specific configuration
 config/local.json
-config/local.json.bak
-config/local.json.example.bak
+config/local.json.*
+!config/local.json.example
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.key
 *.pem
+*.p12
+*.pfx
+*.secret
+secrets/
 
-# --- Python ---
+# Python bytecode, environments, packaging, and test output
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -30,48 +42,89 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-venv/
-.venv/
-env/
-ENV/
-env.bak/
-venv.bak/
 .pytest_cache/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 .tox/
 .nox/
 .hypothesis/
-.pytest_cache/
 .mypy_cache/
 .dmypy.json
 dmypy.json
 .pyre/
+.pyright/
 .ruff_cache/
-.cruff_cache
 
-# --- macOS ---
+# Application runtime state, logs, databases, and crash artifacts
+.kyros/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.pid
+*.pid.lock
+*.sock
+core.*
+*.core
+vgcore.*
+*.stackdump
+
+# macOS metadata and native build products
 .DS_Store
 .AppleDouble
 .LSOverride
 Icon
+Icon?
 ._*
 .DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
+.fseventsd/
+.Spotlight-V100/
+.TemporaryItems/
+.Trashes/
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 .AppleDB
 .AppleDesktop
-Network Trash Folder
-Temporary Items
+Network Trash Folder/
+Temporary Items/
 .apdisk
-*.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.dSYM
+*.dSYM/
+*.dSYM.zip
+*.xcarchive/
+*.ipa
+*.app/
+native/kyros-audio
+native/.audio-build.*
+icon.png
+icon.icns
+icon.iconset/
+*.o
+*.a
+*.dylib
 
-# --- IDE / Editor ---
+# Large local audio and model artifacts
+voices/
+recordings/
+captures/
+screenshots/
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.m4a
+*.onnx
+*.pt
+*.bin
+*.ckpt
+*.safetensors
+
+# Editors and operating-system tooling
 .idea/
 .vscode/
 *.swp
@@ -80,50 +133,26 @@ Temporary Items
 *.code-workspace
 *.sublime-project
 *.sublime-workspace
-.project
-.classpath
+*.project
+*.classpath
 .c9/
 *.launch
 .settings/
-*.sublime-workspace
 *.vim
 *.nvim
 
-# --- Logs ve geçici ---
-logs/
-*.log
-*.sqlite
-*.sqlite3
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# --- Proje üretimi (kurulumla oluşur, repoda durmaz) ---
-Kyros.app/
-native/kyros-audio
-icon.png
-icon.icns
-icon.iconset/
-*.app
-
-# --- Ses / model dosyaları (büyük, repoda durmaz) ---
-voices/
-*.wav
-*.mp3
-*.ogg
-*.onnx
-*.pt
-*.bin
-*.ckpt
-*.safetensors
-
-# --- Diğer ---
-*.bak
+# Temporary and patch files
 *.tmp
 *.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
 .cache/
 .parcel-cache/
 .next/
 .nuxt/
-.coverage
-htmlcov
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

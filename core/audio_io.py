@@ -84,6 +84,7 @@ class NativeAudio:
         self._closing = False
         self._restarts = deque()
         self._initialization_failures = 0
+        self._dropped_output = 0
         self._input_device_id = input_device_id
         self._output_device_id = output_device_id
 
@@ -245,8 +246,17 @@ class NativeAudio:
             await self.process.stdin.drain()
 
     def feed(self, pcm):
-        if not self._recovering:
-            self.commands.put_nowait((b"P", pcm))
+        if self._closing or self._recovering:
+            return
+        if self.commands.full():
+            try:
+                self.commands.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            self._dropped_output += 1
+            if self._dropped_output % 32 == 1:
+                log.warning("Native macOS playback queue congested; stale audio was dropped.")
+        self.commands.put_nowait((b"P", bytes(pcm)))
 
     def clear(self):
         self.generation += 1

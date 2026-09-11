@@ -1,9 +1,10 @@
-"""Full-duplex Gemini Live session with cancellable general macOS tools."""
+"""Full-duplex Gemini Live session with cancellable general desktop tools."""
 
 import asyncio
 import base64
 import json
 import logging
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -32,6 +33,10 @@ TOOL_LABELS = {
     "run_shell": "Komut",
     "run_applescript": "Mac otomasyonu",
     "computer": "Ekran işlemi",
+    "linux_desktop": "Linux masaüstü",
+    "launch_app": "Uygulama başlatma",
+    "media_control": "Medya kontrolü",
+    "clipboard": "Clipboard",
     "read_web": "Web okuma",
     "google_search": "Web araması",
     "session_control": "Oturum kontrolü",
@@ -41,6 +46,11 @@ TOOL_LABELS = {
 def _friendly_error_message(exc):
     message = str(exc)
     lower = message.lower()
+    if _is_audio_protocol_error(message):
+        return (
+            "Gemini Live bu ses akışını oturum yapılandırmasında kabul etmedi "
+            "(1007); bağlantı güvenli şekilde durduruldu. Model/protokol yapılandırmasını kontrol edin."
+        )
     if "1011" in message or "internal error" in lower:
         return "Gemini bağlantısı beklenmedik biçimde kapandı (1011). Yeniden bağlanılacak."
     if "timed out" in lower or "timeout" in lower:
@@ -48,6 +58,15 @@ def _friendly_error_message(exc):
     if "401" in message or "403" in message:
         return "Gemini API anahtarı reddedildi. Ayarlardaki anahtarı kontrol edin."
     return message
+
+
+def _is_audio_protocol_error(message):
+    lower = str(message).lower()
+    return "1007" in str(message) and (
+        "content_type_audio" in lower
+        or "audio content type" in lower
+        or "invalid frame payload data" in lower
+    )
 
 
 class GeminiLive:
@@ -74,6 +93,7 @@ class GeminiLive:
         self._thread = None
         self._loop = None
         self._stop = None
+        self._shutdown_done = threading.Event()
         self._startup_stop = threading.Event()
         self._send_lock = None
         self._tool_lock = None
@@ -96,9 +116,25 @@ class GeminiLive:
         self._barge_in_loud_count = 0
         self._barge_in_until = 0.0
         self._model_responding = False
+        self._playback_epoch = 0
+        self._playback_stop_task = None
+        self._mic_dropped = 0
+        self._last_mic_drop_log = 0.0
+        self._last_interrupt_at = 0.0
+        # Live can emit a late second response while the microphone is idle.
+        # Keep an explicit user-turn gate so that late model speech/tool calls
+        # cannot become a self-started conversation.
+        self._user_input_serial = 0
+        self._last_session_control_serial = 0
+        self._assistant_turn_open = False
+        self._tool_response_pending = False
+        self._awaiting_user_input = True
+        self._last_action_input_serial = -1
 
     def _emit(self, callback, *args):
-        if callback:
+        # Qt/AppKit callbacks can repaint native windows.  Once shutdown has
+        # started, no worker-thread callback is allowed to reach the UI.
+        if callback and not self._startup_stop.is_set():
             try:
                 callback(*args)
             except Exception:
@@ -115,7 +151,7 @@ class GeminiLive:
             else "bekliyor"
             if self.state == STANDBY
             else "konusuyor"
-            if self.playing
+            if self.playing or self._model_responding
             else "uyguluyor"
             if self._tasks
             else "dinliyor"
@@ -129,6 +165,7 @@ class GeminiLive:
         if self._thread and self._thread.is_alive():
             return
         self._startup_stop.clear()
+        self._shutdown_done.clear()
         self.is_running = True
         self._thread = threading.Thread(
             target=self._thread_main, name="kyros-live", daemon=True
@@ -140,7 +177,11 @@ class GeminiLive:
         if self._loop and self._stop and not self._loop.is_closed():
             self._loop.call_soon_threadsafe(self._stop.set)
         if self._thread and self._thread is not threading.current_thread():
-            self._thread.join(timeout=6)
+            # A websocket handshake may have its 15-second open timeout.  Do
+            # not leave the daemon audio/asyncio thread behind while Qt exits.
+            self._thread.join(timeout=20)
+            if self._thread.is_alive():
+                log.warning("Canlı oturum güvenli kapanış için beklenen sürede durmadı.")
 
     def _thread_main(self):
         try:
@@ -151,6 +192,7 @@ class GeminiLive:
             self.is_running = False
             self.connected = False
             self._refresh("hata" if not self._startup_stop.is_set() else "kapali")
+            self._shutdown_done.set()
 
     def _error(self, exc):
         # Don't spam "0 bytes read" on normal Ctrl+C / close
@@ -174,21 +216,43 @@ class GeminiLive:
         self._stop = asyncio.Event()
         self._send_lock = asyncio.Lock()
         self._tool_lock = asyncio.Lock()
-        self._mic_queue = asyncio.Queue(maxsize=15)
+        self._mic_queue = asyncio.Queue(maxsize=config.MIC_QUEUE_SIZE)
         if self._startup_stop.is_set():
             return
         self._refresh("baglaniyor")
         tasks = []
         try:
             if not self.text_only:
-                from core.audio_io import NativeAudio, PortAudio
+                if sys.platform == "darwin":
+                    from core.audio_io import NativeAudio, PortAudio
 
-                if self.audio_backend == "native":
-                    input_id = int(config.AUDIO_INPUT_DEVICE) if config.AUDIO_INPUT_DEVICE else None
-                    output_id = int(config.AUDIO_OUTPUT_DEVICE) if config.AUDIO_OUTPUT_DEVICE else None
-                    self.audio = NativeAudio(input_device_id=input_id, output_device_id=output_id)
+                    if self.audio_backend == "native":
+                        input_id = int(config.AUDIO_INPUT_DEVICE) if config.AUDIO_INPUT_DEVICE else None
+                        output_id = int(config.AUDIO_OUTPUT_DEVICE) if config.AUDIO_OUTPUT_DEVICE else None
+                        self.audio = NativeAudio(input_device_id=input_id, output_device_id=output_id)
+                    else:
+                        # Preserve the original macOS fallback semantics for
+                        # every non-native value; Linux selects its own branch.
+                        self.audio = PortAudio()
+                elif sys.platform == "linux":
+                    from core.linux_audio import PipeWireAudio, PortAudio
+
+                    input_id = config.AUDIO_INPUT_DEVICE or None
+                    output_id = config.AUDIO_OUTPUT_DEVICE or None
+                    if self.audio_backend in ("pipewire", "native"):
+                        self.audio = PipeWireAudio(
+                            input_device_id=input_id, output_device_id=output_id
+                        )
+                    elif self.audio_backend == "portaudio":
+                        self.audio = PortAudio(
+                            input_device_id=input_id, output_device_id=output_id
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Linux ses backendi desteklenmiyor: {self.audio_backend}"
+                        )
                 else:
-                    self.audio = PortAudio()
+                    raise RuntimeError("Kyros ses backendi yalnızca macOS ve Linux'ta destekleniyor.")
                 self.audio.on_route_change = self._on_audio_route
                 if hasattr(self.audio, "on_headphone"):
                     self.audio.on_headphone = self._on_headphone
@@ -236,6 +300,8 @@ class GeminiLive:
     def _on_audio_route(self, changing):
         self._audio_changing = changing
         self._drain_mic()
+        self._playback_epoch += 1
+        self._cancel_playback_stop()
         self.playing = False
         self._emit(self.on_mic_level, 0.0)
         self._refresh()
@@ -278,12 +344,16 @@ class GeminiLive:
                     if now - self._playing_start < config.MIC_GATE_BLOCK_MS / 1000.0:
                         self._gated_dropped += 1
                         return
-                    # Barge-in: sus/dur/bir dakika/bir dakika bekle — 2 ardışık yüksek ses yeterli
+                    # Require several consecutive frames so a click/pop or a
+                    # single echo peak does not cancel a response.
                     if rms > config.BARGE_IN_RMS:
                         self._barge_in_loud_count += 1
                     else:
                         self._barge_in_loud_count = 0
-                    if self._barge_in_loud_count >= 2:  # ~170ms
+                    if (
+                        self._barge_in_loud_count
+                        >= config.BARGE_IN_CONSECUTIVE_CHUNKS
+                    ):
                         log.info("Sesli durdurma algılandı; yanıt kesildi.")
                         log.debug("Söz kesme seviyesi: rms=%.0f eşik=%d", rms, config.BARGE_IN_RMS)
                         self._barge_in_loud_count = 0
@@ -310,21 +380,69 @@ class GeminiLive:
             # Never replay stale microphone audio after congestion/reconnection.
             if self._mic_queue.full():
                 self._mic_queue.get_nowait()
-                log.warning("Mikrofon akışı yoğunlaştı; eski bir ses parçası atlandı.")
+                self._mic_dropped += 1
+                if (
+                    now - self._last_mic_drop_log
+                    >= config.MIC_DROP_LOG_INTERVAL
+                ):
+                    log.warning(
+                        "Mikrofon akışı yoğunlaştı; %d eski ses parçası atlandı.",
+                        self._mic_dropped,
+                    )
+                    self._mic_dropped = 0
+                    self._last_mic_drop_log = now
             self._mic_queue.put_nowait(pcm)
+
+    def _cancel_playback_stop(self):
+        task = self._playback_stop_task
+        if task and not task.done():
+            task.cancel()
+        self._playback_stop_task = None
+
+    async def _settle_playback_stop(self, epoch):
+        try:
+            await asyncio.sleep(config.PLAYBACK_STATE_HANGOVER_MS / 1000.0)
+            if epoch != self._playback_epoch:
+                return
+            self.playing = False
+            self._last_playing_end = time.monotonic()
+            self._refresh()
+        except asyncio.CancelledError:
+            return
+        finally:
+            if self._playback_stop_task is asyncio.current_task():
+                self._playback_stop_task = None
 
     def _on_playing(self, playing):
         was_playing = self.playing
-        self.playing = playing and self.state == AKTIF and not self.mic_muted
+        requested = bool(playing and self.state == AKTIF and not self.mic_muted)
+        self._playback_epoch += 1
+        epoch = self._playback_epoch
+        if requested:
+            self._cancel_playback_stop()
+        elif was_playing:
+            # PipeWire and PortAudio can briefly report an empty buffer between
+            # adjacent writes.  Keep the echo gate/UI in the speaking state for
+            # a short, bounded hangover and let a new true edge cancel it.
+            self._playback_stop_task = asyncio.create_task(
+                self._settle_playback_stop(epoch)
+            )
+        self.playing = requested if requested else was_playing
         if not was_playing and self.playing:
             self._playing_start = time.monotonic()
-        if was_playing and not self.playing:
-            self._last_playing_end = time.monotonic()
+        if requested:
+            self._last_playing_end = 0.0
         self._refresh()
 
     def _clear_audio(self):
+        self._playback_epoch += 1
+        self._cancel_playback_stop()
         if self.audio:
             self.audio.clear()
+        self._playback_epoch += 1
+        self._cancel_playback_stop()
+        if self.playing:
+            self._last_playing_end = time.monotonic()
         self.playing = False
         self._model_responding = False
         self._refresh()
@@ -372,7 +490,7 @@ class GeminiLive:
                     delay = 1
                     self._drain_mic()
                     self._refresh()
-                    log.info("Gemini Live hazır. Model: %s.", self.model)
+                    log.info("Gemini Live oturumu kuruldu. Model: %s.", self.model)
                     if self._handle:
                         log.debug("Önceki Gemini oturumu sürdürüldü.")
                     # Reconcile real local state with resumed conversation; never replay commands.
@@ -401,23 +519,33 @@ class GeminiLive:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self._error(exc)
-                # A stale resumption token may be rejected; retry once as a fresh session.
-                if not established and self._handle:
-                    self._handle = None
-                elif not established:
-                    status = getattr(
-                        getattr(exc, "response", None), "status_code", None
-                    )
-                    if (
+                status = getattr(
+                    getattr(exc, "response", None), "status_code", None
+                )
+                stale_resume = not established and bool(self._handle)
+                protocol_close = (
+                    isinstance(exc, ConnectionClosed) and exc.code in (1007, 1008)
+                )
+                setup_failure = (
+                    not established
+                    and (
                         isinstance(exc, RuntimeError)
                         or status in (400, 401, 403, 404)
-                        or (
-                            isinstance(exc, ConnectionClosed)
-                            and exc.code in (1007, 1008)
-                        )
-                    ):
-                        raise
+                        or protocol_close
+                    )
+                )
+                # Retrying a negotiated 1007 audio-protocol failure in a tight
+                # loop only reproduces the same server rejection and floods the
+                # microphone queue.  Stop the session and show one actionable
+                # error; a later restart/model change can recover cleanly.
+                if (established and (protocol_close or _is_audio_protocol_error(exc))) or (
+                    setup_failure and not stale_resume
+                ):
+                    raise
+                self._error(exc)
+                # A stale resumption token may be rejected; retry once as a fresh session.
+                if stale_resume:
+                    self._handle = None
             finally:
                 self.connected = False
                 self.ws = None
@@ -444,15 +572,18 @@ class GeminiLive:
         while True:
             pcm = await self._mic_queue.get()
             if not self.mic_muted:
-                await self._send(
-                    {
-                        "realtimeInput": {
-                            "audio": {
-                                "mimeType": "audio/pcm;rate=16000",
-                                "data": base64.b64encode(pcm).decode(),
+                await asyncio.wait_for(
+                    self._send(
+                        {
+                            "realtimeInput": {
+                                "audio": {
+                                    "mimeType": "audio/pcm;rate=16000",
+                                    "data": base64.b64encode(pcm).decode(),
+                                }
                             }
                         }
-                    }
+                    ),
+                    config.AUDIO_SEND_TIMEOUT,
                 )
 
     async def _receiver(self, ws):
@@ -479,15 +610,33 @@ class GeminiLive:
             self._cancel_tools(ids)
         content = message.get("serverContent", {})
         if content.get("interrupted"):
+            now = time.monotonic()
+            log_interrupt = (
+                now - self._last_interrupt_at
+                >= config.INTERRUPT_LOG_DEDUP_MS / 1000.0
+            )
+            self._last_interrupt_at = now
             self._discard_until_turn_end = True
             self._model_responding = False
+            self._assistant_turn_open = False
+            self._tool_response_pending = False
+            self._awaiting_user_input = True
             self._clear_audio()
             self._cancel_tools()
-            log.info("Kullanıcı araya girdi; yanıt ve bekleyen işlemler durduruldu.")
+            if log_interrupt:
+                log.info("Kullanıcı araya girdi; yanıt ve bekleyen işlemler durduruldu.")
         transcript = content.get("inputTranscription", {}).get("text")
         if transcript:
+            self._user_input_serial += 1
+            self._assistant_turn_open = True
+            self._tool_response_pending = False
+            self._discard_until_turn_end = False
+            if self._awaiting_user_input:
+                self._last_action_input_serial = self._user_input_serial - 1
+                self._awaiting_user_input = False
             self._last_input_at = time.monotonic()
             self._emit(self.on_text, "Sen", transcript)
+            log.debug("Kullanıcı transkripti: %s", transcript.replace("\n", " ")[:240])
         transcript = content.get("outputTranscription", {}).get("text")
         # Standby/wake feedback (bekleme cümlesi) STANDBY'de de duyulsun — _feedback_until penceresi
         is_feedback_window = time.monotonic() < self._feedback_until
@@ -495,9 +644,15 @@ class GeminiLive:
             transcript
             and (self.state == AKTIF or is_feedback_window)
             and not self.mic_muted
+            and self._assistant_turn_open
             and not self._discard_until_turn_end
         ):
             self._emit(self.on_text, "Kyros", transcript)
+        if transcript and self._tool_response_pending:
+            # The first model output after a tool response belongs to the
+            # same user turn.  Once it starts, the next turnComplete closes
+            # the response gate again.
+            self._tool_response_pending = False
         if not self._discard_until_turn_end:
             for part in content.get("modelTurn", {}).get("parts", []):
                 data = part.get("inlineData", {})
@@ -505,7 +660,10 @@ class GeminiLive:
                     data.get("mimeType", "").startswith("audio/pcm")
                     and (self.state == AKTIF or is_feedback_window)
                     and not self.mic_muted
+                    and self._assistant_turn_open
                 ):
+                    if self._tool_response_pending:
+                        self._tool_response_pending = False
                     if not self._model_responding:
                         self._model_responding = True
                     if self.audio:
@@ -536,8 +694,38 @@ class GeminiLive:
             if stopped_batch:
                 await self._respond(call, {"ok": False, "cancelled": True})
             elif name == "session_control":
-                result = await self._control(args.get("action"))
-                stopped_batch = args.get("action") in ("stop", "standby")
+                action = args.get("action")
+                # A model may continue a completed turn by itself.  Wake is
+                # allowed to recover the initial standby session, but standby
+                # and stop must be attached to a fresh user turn; otherwise
+                # they would make the assistant "talk to itself" or sleep
+                # after an unrelated task.
+                fresh_user_turn = (
+                    self._assistant_turn_open
+                    and self._user_input_serial > self._last_session_control_serial
+                )
+                if action in ("standby", "stop") and (
+                    not fresh_user_turn
+                    or self._user_input_serial <= self._last_action_input_serial
+                ):
+                    result = {
+                        "ok": False,
+                        "ignored": True,
+                        "error": "Ignored session control; wait for an explicit user request.",
+                    }
+                    stopped_batch = True
+                    self._assistant_turn_open = False
+                    self._tool_response_pending = False
+                    self._discard_until_turn_end = True
+                    self._clear_audio()
+                    log.debug(
+                        "İzinsiz oturum kontrolü yok sayıldı: %s (yeni kullanıcı turu yok).",
+                        action,
+                    )
+                else:
+                    result = await self._control(action)
+                    self._last_session_control_serial = self._user_input_serial
+                    stopped_batch = action in ("stop", "standby")
                 self._remember(call_id, result)
                 await self._respond(call, result)
             elif self.state != AKTIF or self.mic_muted or self._discard_until_turn_end:
@@ -548,6 +736,7 @@ class GeminiLive:
                 self._remember(call_id, result)
                 await self._respond(call, result)
             else:
+                self._last_action_input_serial = self._user_input_serial
                 task = asyncio.create_task(self._run_tool(call, self._epoch))
                 self._tasks[call_id] = task
                 task.add_done_callback(
@@ -557,6 +746,9 @@ class GeminiLive:
         if content.get("turnComplete"):
             self._discard_until_turn_end = False
             self._model_responding = False
+            if not self._tasks and not self._tool_response_pending:
+                self._assistant_turn_open = False
+                self._awaiting_user_input = True
 
     def _tool_done(self, call, task):
         # Cancellation may arrive before the coroutine's first instruction/finally block.
@@ -588,16 +780,19 @@ class GeminiLive:
             if self.mic_muted:
                 return {"ok": False, "error": "Microphone is disabled by the user."}
             self.state = AKTIF
+            self._assistant_turn_open = True
             # Wake feedback ("Efendim, sizi dinliyorum") 1.8s boyunca kesilmesin
             self._feedback_until = time.monotonic() + 1.8
         elif action == "standby":
             # Bekleme cümlesi ÖNCE söylendi (protokolde), sonra standby çağrılır.
             # O cümleyi kesmemek için discard/clear yapma — sadece araçları iptal et.
             self.state = STANDBY
+            self._assistant_turn_open = True
             self._feedback_until = time.monotonic() + 1.5
             self._cancel_tools()
         elif action == "stop":
             self.state = AKTIF
+            self._assistant_turn_open = False
             self._discard_until_turn_end = True
             self._clear_audio()
             self._cancel_tools()
@@ -669,7 +864,19 @@ class GeminiLive:
             elif result.get("ok"):
                 tool_log.info("Tamamlandı: %s (%.1f sn).", label, elapsed)
             else:
-                tool_log.error("Başarısız: %s (%.1f sn).", label, elapsed)
+                detail = (
+                    result.get("error")
+                    or result.get("detail")
+                    or result.get("stderr")
+                    or "tool returned ok=false"
+                )
+                tool_log.error(
+                    "Başarısız: %s [%s] (%.1f sn): %s",
+                    label,
+                    str(call_id)[:80],
+                    elapsed,
+                    str(detail).replace("\n", " ")[:320],
+                )
             self._emit(
                 self.on_tool,
                 name,
@@ -686,19 +893,28 @@ class GeminiLive:
                 except Exception as exc:
                     self._error(exc)
 
-    async def _respond(self, call, result):
+    async def _respond(self, call, result, *, silent=False):
         response = dict(result)
         function_response = {
             "id": call.get("id", ""),
             "name": call.get("name", ""),
             "response": response,
         }
-        if call.get("name") != "session_control":
+        if (
+            call.get("name") != "session_control"
+            and "gemini-3.1" not in str(self.model).lower()
+        ):
             function_response["scheduling"] = (
                 "SILENT"
-                if result.get("cancelled") or self.state != AKTIF
+                if silent
+                or result.get("cancelled")
+                or result.get("ignored")
+                or self.state != AKTIF
                 else "WHEN_IDLE"
             )
+        if not silent and not result.get("ignored"):
+            self._assistant_turn_open = True
+            self._tool_response_pending = True
         await self._send({"toolResponse": {"functionResponses": [function_response]}})
 
     def _submit(self, factory):
@@ -719,6 +935,12 @@ class GeminiLive:
             return
 
         async def send():
+            self._user_input_serial += 1
+            self._assistant_turn_open = True
+            self._tool_response_pending = False
+            self._awaiting_user_input = False
+            self._last_action_input_serial = self._user_input_serial - 1
+            self._discard_until_turn_end = False
             self._clear_audio()
             self._cancel_tools()
             self._emit(self.on_text, "Sen", text)

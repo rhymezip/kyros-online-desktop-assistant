@@ -2,558 +2,511 @@
 
 # KYROS
 
-### Your AI-Powered Desktop Voice Assistant for macOS
+### A natural-language desktop assistant for macOS and Linux
 
-*Speak naturally. Kyros listens, understands, and acts.*
+Speak normally. Kyros listens through Gemini Live, chooses the appropriate
+general-purpose capability, performs the work, and reports the real result.
 
-[![macOS](https://img.shields.io/badge/macOS-13+-000000?style=for-the-badge&logo=apple&logoColor=white)](https://www.apple.com/macos/)
-[![Python](https://img.shields.io/badge/Python-3.10--3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Gemini](https://img.shields.io/badge/Gemini-Live-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/pulls)
-[![Issues](https://img.shields.io/github/issues/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/issues)
-[![Stars](https://img.shields.io/github/stars/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/stargazers)
-[![Forks](https://img.shields.io/github/forks/rhymezip/kyros-online-desktop-assistant?style=for-the-badge)](https://github.com/rhymezip/kyros-online-desktop-assistant/network/members)
-
-<br>
-
-**Kyros** is a real-time voice assistant that lives on your Mac and connects to Google's Gemini Live API. It features a full-duplex audio engine built in Swift, a Dynamic Island-style floating panel, and a powerful tool system that lets you control your entire Mac — with your voice.
-
-No hardcoded commands. No separate STT/TTS pipeline. No regex matching.
-**One model. One audio path. Pure conversation.**
-
-<br>
-
-![Screenshots](assets/1.png)
+**macOS 13+** · **Linux / Wayland** · **Hyprland first-class** · **Python 3.10–3.14** · **MIT**
 
 </div>
 
 ---
 
-## Table of Contents
+## What Kyros is
 
-- [Features](#-features)
-- [Demo](#-demo)
-- [Architecture](#-architecture)
-- [Quick Start](#-quick-start)
-- [Requirements](#-requirements)
-- [Installation](#-installation)
-- [Usage](#-usage)
-- [Voice Commands](#voice-commands)
-- [Session States](#session-states)
-- [Panel & Settings](#panel--settings)
-- [Tools & Capabilities](#tools--capabilities)
-- [Live Audio Engine](#live-audio-engine)
+Kyros is a local desktop client for Google's Gemini Live API. It combines
+full-duplex voice, a lightweight PyQt6 panel, platform-native audio, and
+general desktop tools in one conversation.
+
+The macOS path remains native where it matters: Swift `AVAudioEngine`, Apple
+voice processing, Accessibility, Quartz, AppleScript, and `zsh`. Linux uses a
+separate adapter built around PipeWire, Hyprland/Wayland, AT-SPI2, XDG portals,
+and the best available input/output backends.
+
+The central design decision is deliberate: Kyros has no phrase-specific
+intent router, application allowlist, or regex command matcher. The model
+receives general capabilities and composes them at runtime. Tool results are
+read and verified; missing capabilities are returned as real errors instead of
+being guessed.
+
+## Contents
+
+- [Highlights](#highlights)
+- [Platform support](#platform-support)
+- [Quick start](#quick-start)
+- [Installation](#installation)
+- [Uninstallation](#uninstallation)
+- [Running Kyros](#running-kyros)
+- [Conversation and session control](#conversation-and-session-control)
+- [Tool surface](#tool-surface)
+- [Linux and Hyprland](#linux-and-hyprland)
+- [macOS](#macos)
+- [Audio](#audio)
 - [Configuration](#configuration)
-- [Testing](#testing)
+- [Diagnostics and testing](#diagnostics-and-testing)
 - [Troubleshooting](#troubleshooting)
-- [Security & Privacy](#security--privacy)
-- [Project Structure](#project-structure)
-- [FAQ](#faq)
+- [Security and privacy](#security-and-privacy)
+- [Repository hygiene](#repository-hygiene)
+- [Project layout](#project-layout)
 - [Contributing](#contributing)
 - [License](#license)
-- [Turkish](README.tr.md)
+- [Türkçe](README.tr.md) · [Русский](README.ru.md)
 
----
+## Highlights
 
-## Features
+- **Live voice:** native Gemini audio with microphone input, spoken output,
+  interruption support, and session resumption.
+- **One conversation:** no separate speech-to-text/text-to-speech orchestration
+  and no hardcoded application workflows.
+- **General desktop control:** shell, UI inspection, keyboard/mouse input,
+  application launching, media, clipboard, notifications, web reading, and
+  search.
+- **Platform-native audio:** Swift voice processing on macOS; PipeWire is the
+  Linux default, with an explicit PortAudio fallback.
+- **Hyprland-aware Linux support:** compositor IPC, workspaces, windows,
+  screenshots, portals, AT-SPI2, and capability inspection.
+- **Cancellable execution:** tool work is bounded, interruptible, and reports
+  the actual exit status or UI result.
+- **Quiet terminal output:** concise live status events in the terminal;
+  detailed diagnostics remain in rotating logs.
+- **Ownership-aware lifecycle:** the installer records exactly what it created,
+  and the uninstaller uses that record instead of guessing.
 
-<table>
-<tr>
-<td width="50%">
+## Platform support
 
-**Live Audio**
-Full-duplex voice with echo cancellation. 16 kHz mic input, 24 kHz TTS output, 20 ms chunks, 350 ms VAD.
+| Platform | Primary path | Notes |
+| --- | --- | --- |
+| macOS 13+ | Swift audio bridge + Accessibility/Quartz | Install Apple Command Line Tools and grant the requested privacy permissions. |
+| Linux / Wayland | PipeWire + `linux_desktop` | Hyprland is the primary target. XDG portals and X11/XWayland fallbacks are used when available. |
+| Linux distributions | `pacman`, `apt`, `dnf`, `zypper` | `install.sh` uses official repositories and stops on unsupported package managers. |
+| Windows | Not supported | No Windows implementation is included. |
 
-**Gemini Native Audio**
-Uses `gemini-2.5-flash-native-audio` — a single model handles conversation, tool calling, and voice synthesis natively.
+## Quick start
 
-**Full Mac Control**
-Shell commands, AppleScript/JXA, Accessibility API (click, drag, scroll, type, screenshot), app automation.
-
-**Google Search**
-Built-in web search tool bound directly to the Live session — no browser needed.
-
-</td>
-<td width="50%">
-
-**Smart Session Management**
-Wake with *Hey Kyros*, standby with *you can wait*, stop with *stop*. The model decides.
-
-**Resilient Connection**
-Session resumption, buffer recovery, automatic reconnection. Survives network hiccups.
-
-**Dynamic Island UI**
-Floating 300×100 panel with transcript, mic level, settings, and right-click controls.
-
-**Secure by Design**
-API keys stored with `0600` permissions, never logged. Elevated commands use native macOS auth dialogs.
-
-</td>
-</tr>
-</table>
-
-> **Design Principle:** Kyros uses general-purpose tools composed at runtime. Example commands like *"open Notes"* or *"search Fenerbahçe"* have no hard-coded branches — the model orchestrates everything.
-
----
-
-## Demo
-
-<p align="center">
-  <img src="assets/2.png" alt="Kyros in action" width="800">
-</p>
-<p align="center">
-  <img src="assets/3.png" alt="Kyros settings" width="600">
-</p>
-
----
-
-## Architecture
-
-```
-                    ┌─────────────────────────────────────────────┐
-                    │              Gemini Live (WSS)               │
-                    │     gemini-2.5-flash-native-audio            │
-                    └──────────┬──────────────────┬───────────────┘
-                               │  PCM 24k (TTS)   │  Tool Calls
-                               ▼                  ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                         macOS Desktop                            │
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌───────────────────┐  │
-│  │  AVAudioEngine│    │  PyQt6 Panel │    │  Tool Executor    │  │
-│  │  (Swift)      │    │  (Dynamic    │    │  ┌─────────────┐ │  │
-│  │  • Mic 16kHz  │    │   Island)    │    │  │ run_shell    │ │  │
-│  │  • Speaker    │    │  • Transcript│    │  │ run_apple-   │ │  │
-│  │  • Echo CXL   │    │  • Mic Level │    │  │   script     │ │  │
-│  │  • VAD        │    │  • Settings  │    │  │ computer     │ │  │
-│  └──────┬───────┘    │  • Controls  │    │  │  (AX/API/    │ │  │
-│         │ PCM 16k     └──────────────┘    │  │   screenshot)│ │  │
-│         └────────────────────────────────▶│  │ read_web     │ │  │
-│                                           │  │ google_search│ │  │
-│                                           │  └─────────────┘ │  │
-│                                           └───────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Key design decisions:**
-- **Single model architecture** — No secondary STT/TTS. Gemini handles voice natively.
-- **Full duplex** — Mic and speaker share the same `AVAudioEngine` with Apple's voice processing.
-- **Cancellable tools** — Every tool runs as an `asyncio` task. Interruption clears the queue instantly.
-- **Composable tools** — No intent matching or regex. The model decides which tools to call.
-
----
-
-## Quick Start
-
-```bash
-# 1. Clone
+~~~bash
 git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
 cd kyros-online-desktop-assistant
 
-# 2. Install (creates venv, installs deps, builds audio engine)
+chmod +x install.sh uninstall.sh
 bash install.sh
 
-# 3. Run
 venv/bin/python main.py
-```
+~~~
 
-That's it. The panel opens, you paste your Gemini API key in Settings, and you're live.
-
----
-
-## Requirements
-
-| Component | Version | Notes |
-|-----------|---------|-------|
-| **macOS** | 13+ | Recommended: 15.x (Sequoia) |
-| **Python** | 3.10 – 3.14 | Recommended: **3.12** |
-| **Apple CLI Tools** | Latest | `xcode-select --install` |
-| **Gemini API Key** | — | Get one at [aistudio.google.com](https://aistudio.google.com) |
-
-> Python code is cross-platform testable; Swift audio engine and Live API require macOS.
-
----
+The installer detects macOS or Linux and selects only that platform's Python
+dependencies. On the first run, use the Settings panel to add and test a
+direct Google Gemini API key, or provide the key through the environment before
+installation.
 
 ## Installation
 
-### Option A: Automated (recommended)
+### Recommended installer
 
-```bash
-git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
-cd kyros-online-desktop-assistant
+~~~bash
 bash install.sh
-```
+~~~
 
-**What `install.sh` does:**
-1. Finds a compatible Python (3.10–3.14), creates `venv/`
-2. Installs all dependencies from `requirements.txt`
-3. Prompts for your Gemini API key (if not set) → writes `config/local.json` with `0600` perms
-4. Builds the Swift audio engine (`native/kyros-audio`)
-5. Runs the test suite automatically
+`install.sh` performs the following platform-aware steps:
 
-### Option B: Manual
+1. Detects `Darwin` or `Linux`; other platforms are rejected.
+2. Selects `requirements-macos.txt` or `requirements-linux.txt`.
+3. On Linux, detects `pacman`, `apt`, `dnf`, or `zypper` and resolves the
+   distribution's package names for the complete desktop toolset.
+4. Creates a project-local `venv/` with Python 3.10–3.14.
+5. Installs Python dependencies inside that environment and runs `pip check`.
+6. On macOS, builds and signs the local Swift audio binary.
+7. On Linux, records newly installed packages and configures the narrowly
+   scoped `uinput`/`ydotoold` integration when it is available.
+8. Runs the unit-test suite before reporting success.
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+Linux packages are installed only from the detected distribution's official
+repositories. The installer does not use the AUR, external installer scripts,
+`sudo pip`, `--break-system-packages`, or a partial-upgrade `pacman -Sy`.
+
+Preview the plan without changing files, packages, services, or configuration:
+
+~~~bash
+bash install.sh --dry-run
+~~~
+
+### Linux PortAudio fallback
+
+PipeWire is the Linux default and does not require NumPy or `sounddevice`.
+Install the optional PortAudio path only when you need it:
+
+~~~bash
+bash install.sh --with-portaudio
+venv/bin/python main.py --audio-backend portaudio
+~~~
+
+### Why Linux may ask for a password
+
+If Linux packages or the scoped `/dev/uinput` permission setup are missing,
+the installer explains the exact operation before requesting administrator
+authorization. The password:
+
+- is handled by the system authorization mechanism;
+- is never sent to Gemini and is never written to a Kyros file;
+- is used only for the package or permission operation being described;
+- does not run ordinary Kyros work as root.
+
+The `uinput` rule grants the dedicated `kyros-input` group access to the
+virtual input device only; it does not grant general access to physical
+keyboard or mouse devices. A logout/login may be required after the group
+change.
+
+## Uninstallation
+
+Inspect the cleanup plan first:
+
+~~~bash
+bash uninstall.sh --dry-run
+~~~
+
+Then remove Kyros-owned resources:
+
+~~~bash
+bash uninstall.sh
+~~~
+
+The uninstaller is ownership-aware:
+
+- It removes only Linux packages recorded as absent before Kyros installed
+  them. Packages that already existed are not selected.
+- It never performs a broad `autoremove` and does not use dependency-removal
+  modes such as `pacman -Rs`.
+- It removes the project `venv` only when Kyros created it.
+- It removes the generated macOS audio binary only when Kyros created it.
+- It disables/removes only the Kyros-owned `ydotoold` service and unchanged
+  Kyros permission files.
+- It preserves `config/local.json` by default because it may contain the API
+  key.
+
+Use `--yes` to skip confirmation prompts, or explicitly request the local
+configuration prompt with:
+
+~~~bash
+bash uninstall.sh --purge-config
+~~~
+
+If the installation manifest is missing, the safe behavior is to preserve
+existing environments and system packages rather than guess.
+
+## Running Kyros
+
+~~~bash
+venv/bin/python main.py                  # Panel + Live voice
+venv/bin/python main.py --text           # Text-only Live session; no microphone
+venv/bin/python main.py --no-panel       # Headless Live session
+venv/bin/python main.py --doctor         # Read-only local diagnostics
+venv/bin/python main.py --audio-check    # Local audio check; no Gemini call
+venv/bin/python main.py --debug          # More detail in the terminal
+~~~
+
+For a changed macOS audio source, rebuild the native bridge:
+
+~~~bash
 bash build_audio.sh
-```
+venv/bin/python main.py --audio-check
+~~~
 
-Then set your API key:
+`build_audio.sh` is macOS-only. Linux never builds or uses the Swift bridge.
 
-```bash
-export GEMINI_API_KEY="your-key-here"
-```
+## Conversation and session control
 
-Or copy the example config:
+Kyros is intended to be used conversationally. The model must inspect tool
+results before claiming success, and it must not invent a follow-up response
+after a completed turn.
 
-```bash
-cp config/local.json.example config/local.json
-# Edit config/local.json and add your key
-```
+- **Wake:** say `Hey Kyros` while in standby. The two-word wake phrase is
+  intentional; `Kyros` alone is not a wake request.
+- **Standby:** ask Kyros to wait or enter standby explicitly.
+- **Stop:** ask Kyros to stop or cancel the current work. The session remains
+  active unless the user explicitly requests standby.
+- **Interruption:** a new user turn can interrupt spoken output and cancel
+  pending work. Cancelled side effects are not automatically rolled back.
 
-### First Run Without API Key
+After a tool result, Kyros reports success or failure once and waits for the
+next user turn. It does not add an unsolicited “shall I wait?” question or a
+courtesy closing that the user did not ask for.
 
-On first launch without an API key, Kyros opens the **Settings** panel automatically after 900ms. Paste your key, click **Test**, then **Save and Apply** — connection starts in ~0.6s.
+## Tool surface
 
----
+The model receives the following general capabilities. The examples in this
+table describe the surface; they are not application-specific dispatch rules.
 
-## Usage
+| Tool | macOS | Linux | Purpose |
+| --- | :---: | :---: | --- |
+| `run_shell` | ✓ | ✓ | Run general user-level shell code (`zsh` on macOS, `/bin/sh` on Linux). |
+| `run_applescript` | ✓ | — | Run AppleScript or JXA through native macOS automation. |
+| `computer` | ✓ | ✓ | Inspect and operate the desktop UI through available native backends. |
+| `linux_desktop` | — | ✓ | Linux/Wayland/Hyprland windows, workspaces, AT-SPI2, input, screenshots, clipboard, launch, notifications, and capability inspection. |
+| `launch_app` | ✓ | ✓ | Launch a real application, desktop entry, URI, path, or explicit argv without a shell. |
+| `media_control` | ✓ | ✓ | Control and inspect a selected media player; MPRIS/`playerctl` on Linux. |
+| `clipboard` | ✓ | ✓ | Read or write the native clipboard; Linux primary selection where supported. |
+| `read_web` | ✓ | ✓ | Fetch readable HTTP(S) content without opening a browser. |
+| Google Search | ✓ | ✓ | Gemini's native search tool for current web research. |
+| `session_control` | ✓ | ✓ | Explicit wake, standby, and stop transitions. |
 
-### Run Commands
+There is no fixed Spotify/Notes/Telegram branch in the command path. For
+example, launching an application is a general `launch_app` operation; media
+actions are sent through `media_control`; visible UI work is inspected and
+verified through `computer` or `linux_desktop`.
 
-```bash
-venv/bin/python main.py                  # Panel + Live (recommended)
-venv/bin/python main.py --text           # Text-only mode, no mic
-venv/bin/python main.py --no-panel       # Headless, no GUI
-venv/bin/python main.py --audio-check    # Test audio engine only
-venv/bin/python main.py --doctor         # Diagnostic checks
-venv/bin/python main.py --debug          # Verbose logging
-```
+Elevated shell work is intentionally separate from ordinary work. On macOS it
+opens the native administrator dialog; on Linux it uses the visible polkit
+`pkexec` dialog when available. Kyros does not ask for a password through
+voice and does not run normal commands as root.
 
-### Voice Commands
+## Linux and Hyprland
 
-Just talk naturally. Kyros understands context and composes tools on the fly:
+Linux uses a capability-driven adapter rather than pretending that Wayland has
+macOS-style unrestricted input APIs.
 
-```text
-Hey Kyros, open Notes and create a new note titled "Meeting Notes"
+`linux_desktop` can expose:
 
-Hey Kyros, research the latest news about Fenerbahçe and summarize it
+- Hyprland IPC for real windows, monitors, focus, movement, sizing, closing,
+  and workspaces;
+- AT-SPI2 application trees and actions when the target application exposes
+  them;
+- screenshots through `grim`/`slurp` or the XDG Screenshot portal;
+- Unicode typing through `wtype`, with `ydotool`, portal, and clipboard-paste
+  fallbacks where appropriate;
+- pointer and low-level keyboard input through `ydotoold`, XDG Remote Desktop,
+  or X11 backends when authorized;
+- Wayland/X11 clipboard, application launching, notifications, and a
+  `capabilities` inspection action.
 
-Hey Kyros, find Ali in Telegram and send him "See you tomorrow"
+The model is instructed to inspect first and use the returned PID, accessibility
+path, role, label, window address, monitor, or workspace. It must verify
+state-changing actions afterwards. If a compositor or desktop security policy
+denies a capability, the tool returns the real failure; it does not fabricate
+a click, keystroke, screenshot, or application state.
 
-Hey Kyros, look at my Desktop and organize these files by type
+Check the live capability matrix with:
 
-Hey Kyros, what's the weather like in Istanbul right now?
-```
+~~~bash
+venv/bin/python main.py --doctor
+~~~
 
-### Session Control
+The full manual Hyprland acceptance checklist is in
+[LINUX_TEST.md](LINUX_TEST.md).
 
-| Say This | What Happens |
-|----------|-------------|
-| **Hey Kyros** | Wakes from standby, starts listening |
-| **you can wait** | Goes to standby, waits for next wake |
-| **stop / cancel** | Cancels current tasks, stays active |
-| **Microphone off** | Mutes mic via right-click menu |
+## macOS
 
-> **Note:** Only *"Hey Kyros"* wakes the assistant — saying *"Kyros"* alone in standby does nothing. The model handles wake/standby/stop decisions via `session_control`.
+The macOS path uses the native Swift audio bridge and the existing
+Accessibility/Quartz/AppleScript integrations. The Linux adapter and Linux
+dependency files are not selected on macOS.
 
----
+The first real run may request:
 
-## Session States
+- Microphone;
+- Accessibility;
+- Screen Recording;
+- Automation access for applications controlled through AppleScript or
+  System Events.
 
-| Panel State | Meaning |
-|-------------|---------|
-| `WAITING` | Standby — mic active but tools/TTS off. Waiting for *Hey Kyros*. |
-| `LISTENING` | Active — mic open, VAD listening, ready for commands. |
-| `SPEAKING` | TTS playing — interruptible with *stop/silence/one minute*. |
-| `APPLYING · LISTENING` | Tool executing, but mic and connection stay live. |
-| `AUDIO DEVICE CHANGING` | Default input/output changed, auto-reconnecting. |
+Grant only the permissions needed for the tasks you want Kyros to perform.
+The complete macOS checklist is in [MAC_TEST.md](MAC_TEST.md).
 
----
+## Audio
 
-## Panel & Settings
+| Platform | Default backend | Optional path |
+| --- | --- | --- |
+| macOS | Swift `AVAudioEngine` with Apple voice processing | PortAudio |
+| Linux | PipeWire via `pw-record` and `pw-play` | PortAudio with `--with-portaudio` |
 
-### Panel
+The live protocol uses 16 kHz microphone PCM and 24 kHz spoken output. macOS
+can use Apple's voice-processing path for speaker echo suppression. Linux has
+no Apple voice-processing layer; headphones or a correctly configured
+PipeWire/WirePlumber echo-cancellation graph are preferable when speaker echo
+is audible.
 
-- **Left click** — Opens conversation view (transcript, source links, text input, controls)
-- **Right click** — Context menu (Wake / Stop / Wait / Mic toggle / Settings / Quit)
-- **Settings button** — API key, voice model selection, connection test
-
-### Settings Panel
-
-| Setting | Description |
-|---------|-------------|
-| **API Key** | Your Gemini API key (`AIza...` or `AQ...`). Show/hide toggle. |
-| **Voice Model** | Dropdown of available native audio models (fetched live from API). |
-| **Test** | Validates API key and model availability. Green = ready. |
-| **Save & Apply** | Saves to `config/local.json`, restarts connection in ~0.6s. |
-
-> **Important:** Kyros only works with direct Google Gemini API keys. OpenAI-compatible proxies (`sk-...`) do not support the Live protocol.
-
----
-
-## Tools & Capabilities
-
-Kyros provides general-purpose tools that the model composes at runtime:
-
-| Tool | Description |
-|------|-------------|
-| `run_shell` | Execute any `zsh` command. Supports `elevated=true` for admin (shows macOS password dialog). |
-| `run_applescript` | Run AppleScript or JXA code for app automation. |
-| `computer` | Full GUI interaction: `inspect` (AX tree), `screenshot`, `click`, `drag`, `scroll`, `key`, `type_text`. |
-| `read_web` | Fetch and read web page content. |
-| `google_search` | Search the web directly from the Live session. |
-| `session_control` | Wake, standby, and stop actions. |
-
-### What You Can Do
-
-- **App Control:** Open any app, navigate menus, fill forms
-- **File Management:** Create, edit, organize files and folders
-- **Web Research:** Search, read articles, summarize content
-- **Messaging:** Send messages via Telegram, Notes, or any automation-supported app
-- **System Admin:** Run shell commands with optional elevated privileges
-- **Screen Awareness:** Take screenshots, read UI elements, interact with any visible content
-
----
-
-## Live Audio Engine
-
-Kyros ships with a custom Swift audio engine (`native/AudioBridge.swift`) built on `AVAudioEngine`:
-
-| Feature | Detail |
-|---------|--------|
-| **Mic Input** | 16 kHz PCM, 20 ms chunks |
-| **TTS Output** | 24 kHz PCM via `AVAudioSourceNode` |
-| **Echo Cancellation** | Apple Voice Processing (`setVoiceProcessingEnabled`) |
-| **VAD** | 350 ms silence detection, 40 ms prefix padding |
-| **Barge-in** | 2 consecutive RMS > 1150 for interruption |
-| **Device Hot-swap** | Auto-detects default input/output changes, reconnects in ~75ms |
-| **Fallback** | PortAudio backend for headphones (`--audio-backend portaudio`) |
-
-### Rebuild After Changes
-
-```bash
-bash build_audio.sh
-venv/bin/python main.py --audio-check   # Verify: "Standard started" + frame stats
-```
-
----
+Audio devices can be selected in Settings or through the environment:
+`KYROS_INPUT_DEVICE` and `KYROS_OUTPUT_DEVICE`. Device changes are monitored
+and the affected stream is restarted instead of requiring a full application
+restart.
 
 ## Configuration
 
-### Priority Order
+### API key and model
 
-| Source | Priority | Description |
-|--------|----------|-------------|
-| `GEMINI_API_KEY` env | 1 | `export GEMINI_API_KEY=...` |
-| `GEMINI_MODEL` env | 1 | Override model selection |
-| `config/local.json` | 2 | `{"GEMINI_API_KEY":"...","GEMINI_MODEL":"..."}` |
+The lookup order is:
 
-### Settings in `config/settings.py`
+1. `GEMINI_API_KEY` and `GEMINI_MODEL` environment variables;
+2. matching values in `config/local.json`;
+3. the built-in default model for `GEMINI_MODEL`.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `AUDIO_BACKEND` | `native` | `native` (Swift) or `portaudio` |
-| `SILENCE_DURATION_MS` | `350` | VAD silence threshold |
-| `TOOL_TIMEOUT` | `60` | Tool execution timeout (seconds) |
-| `MAX_TOOL_OUTPUT` | `24000` | Max tool output bytes |
-| `MIC_GATE_RMS` | `1100` | Mic gate RMS threshold during TTS |
-| `MIC_GATE_HANGOVER_MS` | `400` | Post-TTS mic gate hold |
-| `MIC_GATE_BLOCK_MS` | `600` | Post-TTS mic block duration |
+The installer creates `config/local.json` only when needed and restricts it to
+the current user (`0600`). A manual setup can start from the template:
 
-### Supported Models
+~~~bash
+cp config/local.json.example config/local.json
+chmod 600 config/local.json
+~~~
 
-| Model | Status |
-|-------|--------|
-| `gemini-2.5-flash-native-audio-latest` | Stable, recommended |
-| `gemini-2.5-flash-native-audio-preview-09-2025` | Preview |
+Edit the copied file locally, or export the key before starting Kyros:
 
----
+~~~bash
+export GEMINI_API_KEY="your-direct-google-gemini-key"
+~~~
 
-## Testing
+Kyros requires a direct Google Gemini API key for the Live
+`bidiGenerateContent` protocol. An OpenAI-compatible key or proxy is not an
+equivalent backend.
 
-```bash
-# Run all unit tests (38 tests, no API required)
+### Runtime settings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `KYROS_AUDIO_BACKEND` | `native` on macOS; `pipewire` on Linux | Select `native`, `pipewire`, or `portaudio` where supported. |
+| `KYROS_INPUT_DEVICE` | System default | Persisted input-device identifier/name override. |
+| `KYROS_OUTPUT_DEVICE` | System default | Persisted output-device identifier/name override. |
+| `GEMINI_MODEL` | `gemini-2.5-flash-native-audio-latest` | Live voice model; Settings can refresh the available model list. |
+
+The Settings panel can test the API key and selected model before saving and
+restarting the Live connection.
+
+## Diagnostics and testing
+
+Run the local suite from the project environment:
+
+~~~bash
 venv/bin/python -m unittest discover -s tests -v
+~~~
 
-# Run diagnostics (permissions, audio, API key)
-venv/bin/python main.py --doctor
+The installer runs the same suite in quiet mode. It contains cross-platform
+unit and contract coverage for:
 
-# Text-only mode (real API, no mic)
-venv/bin/python main.py --text
+- connection lifecycle, reconnection, cancellation, barge-in, and session
+  discipline;
+- macOS and Linux audio adapters;
+- PipeWire discovery, device routing, and capability reporting;
+- tool execution, shell isolation, application launching, media, clipboard,
+  UI dispatch, and platform-specific declarations;
+- installer/uninstaller ownership rules and permission-file safety;
+- logging and panel shutdown behavior.
 
-# Audio engine check (no API)
-venv/bin/python main.py --audio-check
-```
-
-### Test Coverage
-
-| Test File | What It Tests |
-|-----------|---------------|
-| `test_live.py` | Standby, wake, barge-in, device routing |
-| `test_audio.py` | Audio generation, buffer clearing |
-| `test_connection.py` | WebSocket connection lifecycle |
-| `test_executor.py` | Tool execution, shell/AppleScript |
-
-### Acceptance Testing
-
-See [`MAC_TEST.md`](MAC_TEST.md) for the full manual acceptance test checklist covering setup, wake/standby, barge-in, system capabilities, cancel/connection, and admin privileges.
-
----
+`--doctor` performs read-only local checks and does not call Gemini.
+`--audio-check` starts only the selected local audio backend and does not call
+Gemini. `--text` does use the real Live API, but does not open the microphone.
 
 ## Troubleshooting
 
-| Symptom | Solution |
-|---------|----------|
-| `Microphone failed to start` | System Settings → Privacy → Microphone → grant access to Kyros/Terminal/Python |
-| Stuck on `Connecting` | Check API key (Settings → Test), verify network, check `logs/kyros.log` |
-| `Received 1008 policy violation` | Model/API mismatch — select correct model in Settings |
-| `User location is not supported` | Google regional restriction — try VPN or different network |
-| Audio device changing loop | Bridge v5 debounce handles this; ensure latest `build_audio.sh` |
-| `0 bytes read` after Ctrl+C | Normal WebSocket close — not an error |
-| Barge-in not working | Ensure 2 clear RMS spikes > 1150; check mic gain settings |
-| Wake word not detected | Only *"Hey Kyros"* works — *"Kyros"* alone does not wake from standby |
+| Symptom | First check |
+| --- | --- |
+| Stuck on “Connecting” | Open Settings, test the key/model, then inspect `logs/kyros.log`. |
+| macOS microphone failure | Grant Microphone access to the application/terminal that runs Kyros; run `--audio-check`. |
+| macOS UI action denied | Grant Accessibility, Screen Recording, or Automation permission as appropriate. |
+| Linux microphone failure | Run `--audio-check`; verify PipeWire, WirePlumber, `pw-record`, and `pw-play`. |
+| Linux typing/clicking fails | Run `--doctor`; verify `wtype`, `ydotoold`, portal consent, and the current session. |
+| AT-SPI2 tree is empty | Confirm `at-spi2-core`, PyGObject/typelibs, a running AT-SPI2 bus, and an application that exposes accessibility data. |
+| Media control fails | Confirm a running MPRIS player and `playerctl` on Linux; use the inspected application name on macOS. |
+| Old package appears during uninstall | Read the manifest plan; only packages newly installed by Kyros are candidates. |
+| Terminal is too noisy | Use normal mode for concise events; use `--debug` only while diagnosing. Detailed output is in `logs/kyros.log`. |
 
-### Logs
+Logs are local and rotating:
 
-The terminal shows concise status, audio-device, connection, and tool-result events.
-Low-level audio and connection diagnostics stay in the rotating log file; use
-`--debug` when you also want to see them live in the terminal.
+~~~bash
+tail -f logs/kyros.log
+~~~
 
-```bash
-tail -f logs/kyros.log    # Rotating: 1MB × 3 files
-```
+`logs/` is capped at approximately 1 MiB for the active file plus three
+rotated files. Installer/package details are kept separately under the
+ignored `.kyros/` directory.
 
----
+## Security and privacy
 
-## Security & Privacy
+- API keys live in an ignored `config/local.json` with `0600` permissions or
+  in the environment; Kyros does not log them.
+- Audio, transcriptions, tool calls, and tool results are sent to Gemini as
+  required by the Live session.
+- Screenshots are sent to Gemini only when a screenshot-capable tool is used;
+  Kyros does not keep them in the repository or a permanent local folder.
+- Ordinary tools run as the logged-in user. The project has no hidden root
+  daemon and no privileged background command path.
+- Installer administrator authorization is limited to package and explicitly
+  described Linux permission operations.
+- `run_shell` is intentionally general-purpose and should be treated with the
+  same trust as a terminal opened by the user.
 
-- **API keys** stored in `config/local.json` with `0600` permissions or environment variables — never logged or committed.
-- **Tools run as the logged-in user** — no sandboxing, no allowlist. Use with the same caution as Terminal.
-- **Elevated commands** (`elevated=true`) trigger macOS native password dialogs. Passwords are never requested via voice or stored.
-- **Screenshots** are sent as JPEG to Gemini for `computer` tool context. Not stored locally.
-- **Standby mode** still streams audio to Gemini (no offline wake-word). Use *Microphone off* to cut the stream.
-- **No root execution** — Kyros never runs as root.
+## Repository hygiene
 
----
+The repository `.gitignore` covers both macOS and Linux development output:
+local credentials, environment files, virtual environments, Python caches,
+logs, installer state, native build products, app bundles, editor metadata,
+large audio/model artifacts, and temporary files.
 
-## Project Structure
+Audit the working tree without staging anything:
 
-```
-kyros/
-├── main.py                    # Entry point, CLI args, logging
+~~~bash
+git status --short --ignored
+git check-ignore -v config/local.json .env .kyros logs venv native/kyros-audio
+git add -A --dry-run
+~~~
+
+An ignore rule affects untracked files only. If a secret has ever been
+committed, remove it from the repository history and rotate it;
+`.gitignore` cannot untrack an already tracked path.
+
+## Project layout
+
+~~~text
+.
+├── main.py                         # Application entry point and CLI
 ├── config/
-│   ├── settings.py            # Gemini config, model list, API validation
-│   ├── local.json             # (gitignored) Your API key & model
-│   └── local.json.example     # Template
+│   ├── settings.py                 # Key, model, audio, and runtime settings
+│   └── local.json.example          # Safe configuration template
 ├── core/
-│   ├── gemini_live.py         # Gemini Live session, mic gate, barge-in
-│   ├── audio_io.py            # Audio engine bridge (Swift / PortAudio)
-│   ├── protocol.py            # System prompt, tool definitions
-│   ├── executor.py            # Tool execution (shell, AS, AX, web)
-│   ├── doctor.py              # Diagnostics (--doctor, --audio-check)
-│   ├── bootstrap.py           # Auto-venv activation
-│   ├── macos_ui.py            # macOS UI helpers
-│   └── web_page.py            # Web content fetching
-├── gui/
-│   └── panel.py               # Dynamic Island panel + Settings dialog
+│   ├── gemini_live.py              # Live session, audio flow, cancellation
+│   ├── audio_io.py                 # macOS native/PortAudio path
+│   ├── linux_audio.py              # Linux PipeWire/PortAudio path
+│   ├── linux_ui.py                 # Wayland, Hyprland, AT-SPI2, X11, portals
+│   ├── macos_ui.py                 # macOS Accessibility and screen controls
+│   ├── executor.py                 # General tool execution
+│   ├── protocol.py                 # System instruction and tool declarations
+│   ├── doctor.py                   # Read-only diagnostics
+│   ├── bootstrap.py                # Project-environment bootstrap
+│   └── web_page.py                 # Readable web-page fetcher
+├── gui/panel.py                    # PyQt6 panel and Settings view
 ├── native/
-│   ├── AudioBridge.swift      # Swift audio engine (AVAudioEngine)
-│   ├── Launcher.c             # Kyros.app launcher
-│   └── AudioInfo.plist        # Microphone usage description
-├── assets/
-│   ├── 1.png                  # Screenshot
-│   ├── 2.png                  # Screenshot
-│   └── 3.png                  # Screenshot
-├── tests/                     # 38 unit tests
-├── logs/                      # (gitignored) Rotating logs
-├── install.sh                 # One-command setup
-├── build_audio.sh             # Swift audio engine builder
-├── requirements.txt           # Python dependencies
-├── LICENSE                    # MIT License
-└── README.tr.md               # Turkish documentation
-```
+│   ├── AudioBridge.swift           # macOS AVAudioEngine bridge
+│   ├── AudioInfo.plist             # Native usage metadata
+│   └── Launcher.c                  # Optional macOS launcher source
+├── scripts/kyros-system.sh         # Linux package/permission lifecycle
+├── system/                         # Scoped uinput and ydotoold templates
+├── tests/                          # Unit, contract, and Linux tests
+├── install.sh                      # Platform-aware installer
+├── uninstall.sh                    # Ownership-aware uninstaller
+├── build_audio.sh                  # macOS audio bridge builder
+├── requirements*.txt               # Common and platform-specific Python deps
+├── MAC_TEST.md                     # macOS acceptance checklist
+├── LINUX_TEST.md                   # Linux/Hyprland acceptance checklist
+├── LICENSE                         # MIT License
+└── README.tr.md / README.ru.md     # Translations
+~~~
 
----
-
-## FAQ
-
-<details>
-<summary><strong>Does Kyros work with OpenAI API keys?</strong></summary>
-No. Kyros requires a direct Google Gemini API key (`AIza...` or `AQ...`) for the Live (BidiGenerateContent) protocol. OpenAI-compatible proxies don't support real-time voice.
-</details>
-
-<details>
-<summary><strong>Can I use Kyros with headphones?</strong></summary>
-Yes. Use `--audio-backend portaudio` for headphone mode. The native Swift engine is optimized for speakers with echo cancellation.
-</details>
-
-<details>
-<summary><strong>Does it work on Intel Macs?</strong></summary>
-Yes, with a fallback. The 3-channel voice processing produces no frames on Intel, so Kyros auto-switches to Standard 1-channel mode.
-</details>
-
-<details>
-<summary><strong>Is my data sent to Google?</strong></summary>
-Audio and tool results are sent to Gemini Live for processing. Screenshots are sent as JPEG when the `computer` tool is used. No data is stored by Kyros locally beyond session transcripts in RAM.
-</details>
-
-<details>
-<summary><strong>Can I use Kyros on Linux or Windows?</strong></summary>
-The Python logic is cross-platform testable, but the Swift audio engine and macOS-specific tools (Accessibility, AppleScript) require macOS 13+.
-</details>
-
-<details>
-<summary><strong>How much does it cost?</strong></summary>
-Kyros is free and open-source (MIT). You pay only for Gemini API usage at Google's [pricing](https://ai.google.dev/pricing).
-</details>
-
----
+Runtime directories such as `venv/`, `logs/`, `.kyros/`, `__pycache__/`, and
+the generated `native/kyros-audio` binary are intentionally absent from the
+source tree and ignored by Git.
 
 ## Contributing
 
-Contributions are welcome! Here's how:
+1. Create a focused branch from `main`.
+2. Keep platform-specific code behind the appropriate adapter.
+3. Do not add phrase-specific or application-specific intent branches.
+4. Add or update contract tests for tool, installer, and platform changes.
+5. Run the unit suite and `git diff --check`.
+6. Never commit API keys, local configuration, logs, build products, or
+   generated binaries.
 
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Setup
-
-```bash
-git clone https://github.com/rhymezip/kyros-online-desktop-assistant.git
-cd kyros-online-desktop-assistant
-bash install.sh
+~~~bash
+git switch -c feature/short-description
 venv/bin/python -m unittest discover -s tests -v
-```
-
-### Code Style
-
-- Python: Follow existing conventions, no external linters required
-- Swift: Follow existing patterns in `native/AudioBridge.swift`
-- Tests: Add tests for new tools or significant changes
-
----
+git diff --check
+~~~
 
 ## License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-
-**Built with care for macOS**
-
-*Kyros — because your desktop should listen.*
-
-<br>
-
-[![GitHub](https://img.shields.io/badge/GitHub-rhymezip-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/rhymezip)
-
-</div>
+Kyros is released under the [MIT License](LICENSE).

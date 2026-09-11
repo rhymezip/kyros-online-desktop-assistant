@@ -2,6 +2,7 @@
 
 import logging
 import math
+import sys
 import threading
 import time
 
@@ -921,7 +922,12 @@ class SettingsPane(QWidget):
         self.spinner.start()
         def run():
             try:
-                from core.audio_io import list_audio_devices
+                if sys.platform == "darwin":
+                    from core.audio_io import list_audio_devices
+                elif sys.platform == "linux":
+                    from core.linux_audio import list_audio_devices
+                else:
+                    raise RuntimeError("Ses aygıtı keşfi bu platformda desteklenmiyor.")
                 devices = list_audio_devices()
             except Exception:
                 devices = {"input_devices": [], "output_devices": []}
@@ -1190,6 +1196,8 @@ class KyrosPanel(QMainWindow):
         self._panel_visible = False
         self._settings_open = False
         self._settings_pane = None
+        self._shutdown_prepared = False
+        self._skip_worker_stop = False
 
         self._cur_orb = [
             list(MODES["bekliyor"][f"orb{i + 1}"]) for i in range(ORB_COUNT)
@@ -1215,6 +1223,53 @@ class KyrosPanel(QMainWindow):
         gemini.on_state_change = self.signals.mode.emit
         gemini.on_mic_level = self.signals.level.emit
 
+    def prepare_shutdown(self):
+        """Freeze UI activity before the live worker and Qt are torn down.
+
+        The live session emits from its asyncio thread.  Stopping animations,
+        the 60 FPS repaint timer and the spinner before waiting for that
+        thread prevents late Wayland/AppKit repaints during QApplication
+        destruction.
+        """
+        if self._shutdown_prepared:
+            return
+        self._shutdown_prepared = True
+        self._panel_visible = False
+        # Wayland may already have a paint event queued while the live thread
+        # is being joined.  Disable widget updates before hiding/closing the
+        # native surface so Qt cannot repaint a half-torn-down QWaylandWindow.
+        self.setUpdatesEnabled(False)
+        for name in (
+            "timer",
+            "_slide_anim",
+            "_hide_anim",
+            "_settings_anim",
+            "_settings_fade",
+            "_status_anim",
+        ):
+            animation = getattr(self, name, None)
+            if animation is not None and hasattr(animation, "stop"):
+                animation.stop()
+        spinner = getattr(self, "spinner", None)
+        if spinner is not None and hasattr(spinner, "stop"):
+            spinner.stop()
+        settings_pane = getattr(self, "_settings_pane", None)
+        if settings_pane is not None:
+            pane_spinner = getattr(settings_pane, "spinner", None)
+            if pane_spinner is not None and hasattr(pane_spinner, "stop"):
+                pane_spinner.stop()
+            settings_pane.hide()
+        self.hide()
+
+    def close_for_shutdown(self):
+        """Close the native window before the application quits."""
+        self.prepare_shutdown()
+        self._skip_worker_stop = True
+        try:
+            super().close()
+        finally:
+            self._skip_worker_stop = False
+
     def _setup_window(self):
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -1224,7 +1279,8 @@ class KyrosPanel(QMainWindow):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
+        if sys.platform == "darwin":
+            self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
         self.resize(PANEL_W, PANEL_H)
@@ -1246,6 +1302,8 @@ class KyrosPanel(QMainWindow):
 
     def _setup_statusbar_item(self):
         """Menubar'da status bar item olustur (Textream gibi)."""
+        if sys.platform != "darwin":
+            return
         try:
             import objc
             from AppKit import NSImage, NSMenu, NSMenuItem, NSStatusBar
@@ -1457,6 +1515,12 @@ class KyrosPanel(QMainWindow):
         self._hide_anim.finished.connect(self.hide)
 
     def _fix_macos_window(self):
+        if sys.platform != "darwin":
+            # The compositor owns window stacking on Linux.  Keep the same
+            # visible panel geometry, but do not import AppKit or emit a
+            # misleading macOS warning on every animation frame.
+            self.raise_()
+            return
         try:
             import objc
             from AppKit import (
@@ -1693,7 +1757,12 @@ class KyrosPanel(QMainWindow):
         self.kyros.set_mic_muted(self._mic_muted)
 
     def closeEvent(self, event):
-        if self.kyros and hasattr(self.kyros, "stop"):
+        self.prepare_shutdown()
+        if (
+            not self._skip_worker_stop
+            and self.kyros
+            and hasattr(self.kyros, "stop")
+        ):
             self.kyros.stop()
         event.accept()
         QApplication.instance().quit()

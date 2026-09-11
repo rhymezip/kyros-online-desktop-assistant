@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -41,8 +42,12 @@ def fetch_voice_models(api_key, timeout=8):
                 methods = m.get("supportedGenerationMethods", [])
                 # sadece Live (bidi) destekleyenler
                 if "bidiGenerateContent" in methods:
-                    # voice-native olanlar: native-audio veya live-transcribe
-                    if "native-audio" in name or "transcribe" in name or "live" in name:
+                    # Kyros needs a model that can return Live audio.  A
+                    # transcribe-only Live model may support bidi input but
+                    # cannot satisfy responseModalities=AUDIO.
+                    if "native-audio" in name or (
+                        "live" in name and "transcribe" not in name
+                    ):
                         out.append(name)
             # native-audio olanları öne al
             out.sort(key=lambda x: (0 if "native-audio-latest" in x else 1 if "native-audio" in x else 2))
@@ -169,7 +174,9 @@ def validate_api_key(api_key, model=None, timeout=8):
     return True, "API geçerli."
 
 
-AUDIO_BACKEND = os.environ.get("KYROS_AUDIO_BACKEND", "native")
+AUDIO_BACKEND = os.environ.get(
+    "KYROS_AUDIO_BACKEND", "native" if sys.platform == "darwin" else "pipewire"
+)
 AUDIO_INPUT_DEVICE = os.environ.get("KYROS_INPUT_DEVICE", _local.get("AUDIO_INPUT_DEVICE", ""))
 AUDIO_OUTPUT_DEVICE = os.environ.get("KYROS_OUTPUT_DEVICE", _local.get("AUDIO_OUTPUT_DEVICE", ""))
 SILENCE_DURATION_MS = 350
@@ -178,6 +185,19 @@ MAX_TOOL_TIMEOUT = 30
 COMPUTER_TIMEOUT = 30
 MAX_TOOL_OUTPUT = 24000
 MAX_AUDIO_BUFFER_SECONDS = 30
+# Live audio is intentionally bounded: keeping only the newest microphone
+# frames is preferable to replaying stale speech after a slow network turn.
+MIC_QUEUE_SIZE = 15
+AUDIO_SEND_TIMEOUT = float(os.environ.get("KYROS_AUDIO_SEND_TIMEOUT", "2.0"))
+MIC_DROP_LOG_INTERVAL = float(
+    os.environ.get("KYROS_MIC_DROP_LOG_INTERVAL", "1.0")
+)
+# Playback backends can report a short false->true transition between output
+# writes.  Debouncing the false edge keeps the UI and echo gate stable without
+# changing when actual audio is sent.
+PLAYBACK_STATE_HANGOVER_MS = int(
+    os.environ.get("KYROS_PLAYBACK_STATE_HANGOVER_MS", "180")
+)
 # Gate mic while TTS is playing to avoid self-echo interrupting without AEC (Intel fallback)
 MIC_GATE_RMS = 1100
 MIC_GATE_HANGOVER_MS = 400
@@ -185,3 +205,9 @@ MIC_GATE_BLOCK_MS = 600
 # Barge-in: RMS threshold for interruption detection.
 # 5000 on speakers (prevents self-echo false triggers), 1100 on headphones (no echo).
 BARGE_IN_RMS = int(os.environ.get("KYROS_BARGE_IN_RMS", "5000"))
+BARGE_IN_CONSECUTIVE_CHUNKS = int(
+    os.environ.get("KYROS_BARGE_IN_CONSECUTIVE_CHUNKS", "4")
+)
+INTERRUPT_LOG_DEDUP_MS = int(
+    os.environ.get("KYROS_INTERRUPT_LOG_DEDUP_MS", "250")
+)

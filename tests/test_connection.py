@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import json
+import sys
 import unittest
 from unittest.mock import patch
 from core.gemini_live import GeminiLive, AKTIF
@@ -147,7 +148,12 @@ class StartupTests(unittest.IsolatedAsyncioTestCase):
 
         audio = Audio()
         live = GeminiLive()
-        with patch("core.audio_io.NativeAudio", return_value=audio):
+        backend = (
+            "core.audio_io.NativeAudio"
+            if sys.platform == "darwin"
+            else "core.linux_audio.PipeWireAudio"
+        )
+        with patch(backend, return_value=audio):
             task = asyncio.create_task(live._run())
             await audio.entered.wait()
             live._stop.set()

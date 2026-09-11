@@ -3,6 +3,7 @@ import base64
 import json
 import unittest
 
+import config
 from core.gemini_live import AKTIF, STANDBY, GeminiLive, _friendly_error_message
 from core.protocol import setup_message
 
@@ -189,6 +190,9 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
     async def test_standby_cancels_and_blocks_rest_of_batch(self):
         await self.live._control("wake")
         await self.live._handle_message(
+            {"serverContent": {"inputTranscription": {"text": "bekle"}}}
+        )
+        await self.live._handle_message(
             calls(
                 call("s", "session_control", action="standby"),
                 call(script="do not run"),
@@ -197,6 +201,47 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
         await self.finish()
         self.assertEqual(self.live.state, STANDBY)
         self.assertFalse(self.executor.calls)
+
+    async def test_unsolicited_standby_after_completed_turn_is_ignored(self):
+        await self.live._control("wake")
+        await self.live._handle_message(
+            {"serverContent": {"turnComplete": True}}
+        )
+        await self.live._handle_message(
+            calls(call("standby", "session_control", action="standby"))
+        )
+        self.assertEqual(self.live.state, AKTIF)
+        response = self.socket.sent[-1]["toolResponse"]["functionResponses"][0]
+        self.assertTrue(response["response"]["ignored"])
+
+    async def test_standby_after_same_turn_action_is_ignored(self):
+        await self.live._control("wake")
+        await self.live._handle_message(
+            {"serverContent": {"inputTranscription": {"text": "Spotify aç"}}}
+        )
+        await self.live._handle_message(calls(call("launch")))
+        await self.finish()
+        await self.live._handle_message(
+            calls(call("standby", "session_control", action="standby"))
+        )
+        self.assertEqual(self.live.state, AKTIF)
+        response = self.socket.sent[-1]["toolResponse"]["functionResponses"][0]
+        self.assertTrue(response["response"]["ignored"])
+
+    async def test_late_model_output_after_turn_complete_is_silent(self):
+        texts = []
+        self.live.on_text = lambda who, text: texts.append((who, text))
+        await self.live._control("wake")
+        await self.live._handle_message(
+            {"serverContent": {"outputTranscription": {"text": "İlk yanıt"}}}
+        )
+        await self.live._handle_message(
+            {"serverContent": {"turnComplete": True}}
+        )
+        await self.live._handle_message(
+            {"serverContent": {"outputTranscription": {"text": "Rica ederim"}}}
+        )
+        self.assertEqual(texts, [("Kyros", "İlk yanıt")])
 
     async def test_duplicate_call_is_not_executed_twice(self):
         await self.live._control("wake")
@@ -271,6 +316,29 @@ class LiveTests(unittest.IsolatedAsyncioTestCase):
             setup["realtimeInputConfig"]["activityHandling"],
             "START_OF_ACTIVITY_INTERRUPTS",
         )
+
+    def test_newer_live_model_gets_compatible_function_calling_config(self):
+        setup = setup_message("gemini-3.1-flash-live-preview", STANDBY)["setup"]
+        self.assertNotIn("turnCoverage", setup["realtimeInputConfig"])
+        for tool in setup["tools"][0]["functionDeclarations"]:
+            self.assertNotIn("behavior", tool)
+
+    async def test_playback_false_edge_is_debounced(self):
+        await self.live._control("wake")
+        self.live._on_playing(True)
+        self.live._on_playing(False)
+        self.assertTrue(self.live.playing)
+        await asyncio.sleep(config.PLAYBACK_STATE_HANGOVER_MS / 1000 + 0.04)
+        self.assertFalse(self.live.playing)
+
+    async def test_newer_live_model_response_omits_async_scheduling(self):
+        self.live.model = "gemini-3.1-flash-live-preview"
+        await self.live._respond(
+            call(name="media_control", action="status"),
+            {"ok": True},
+        )
+        response = self.socket.sent[-1]["toolResponse"]["functionResponses"][0]
+        self.assertNotIn("scheduling", response)
 
     async def test_audio_device_change_preserves_session_and_wake_state(self):
         await self.live._control("wake")

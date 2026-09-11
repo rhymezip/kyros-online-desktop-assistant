@@ -10,7 +10,7 @@ def use_project_environment(root):
     python = environment / "bin/python"
     marker = "KYROS_PROJECT_ENV"
     if (
-        sys.platform == "darwin"
+        sys.platform in ("darwin", "linux")
         and Path(sys.prefix).resolve() != environment.resolve()
         and os.environ.get(marker) != str(environment)
         and python.is_file()
